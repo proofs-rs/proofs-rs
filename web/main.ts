@@ -93,6 +93,7 @@ function navigate(path: string) {
 }
 async function refreshMe() {
   me = await request("/me", "GET", undefined, undefined, false);
+  await configReady.catch(() => {});
   window.proofsAccountNavigation(
     document.querySelector("#account-nav")!,
     me,
@@ -103,6 +104,7 @@ async function refreshMe() {
       navigate("/");
     },
     error,
+    config.show_star_karma === true,
   );
 }
 
@@ -143,13 +145,13 @@ function needUser() {
   return true;
 }
 function claimItem(c: any) {
-  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
+  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}${config.show_star_karma ? ` · ${c.star_count} stars` : ""}</div><p class="meta"><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a>${config.show_star_karma ? ` · ${c.report_star_count} stars` : ""} · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""}${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
 }
 function reportItem(c: any) {
   return reportSummary(c);
 }
 function reportSummary(c: any, hideCrate = false) {
-  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
+  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""}${config.show_star_karma ? ` · ${c.star_count} stars` : ""} · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
 }
 function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
   if (data.next_cursor !== null && data.next_cursor !== undefined) {
@@ -175,6 +177,7 @@ async function claimsList(
   cursor = 0,
   renderReport = reportItem,
 ) {
+  await configReady;
   const data = await request(
     path + (path.includes("?") ? "&" : "?") + "cursor=" + cursor,
   );
@@ -211,23 +214,35 @@ async function adminCatalogs() {
   });
 }
 async function home() {
-  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recent reports</h2><div id="home-reports">${loading}</div></section><section><h2>Latest discussion</h2><div id="home-discussion">${loading}</div></section></div>`;
+  const generation = routeID;
+  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns${config.show_home_discussion ? "" : " home-single-column"}"><section><h2>Recent reports</h2><div id="home-reports">${loading}</div></section>${config.show_home_discussion ? `<section><h2>Latest discussion</h2><div id="home-discussion">${loading}</div></section>` : ""}</div>`;
   bind(
     "#search",
     (e) =>
       navigate("/crates?q=" + enc(new FormData(e.target).get("q") as string)),
     "submit",
   );
-  const d = await request("/home");
+  const [d] = await Promise.all([request("/home"), configReady]);
+  if (generation !== routeID) throw new NavigationChanged();
+  if (config.show_home_discussion && !root.querySelector("#home-discussion")) {
+    root.querySelector(".home-columns")!.classList.remove("home-single-column");
+    root
+      .querySelector(".home-columns")!
+      .insertAdjacentHTML(
+        "beforeend",
+        `<section><h2>Latest discussion</h2><div id="home-discussion">${loading}</div></section>`,
+      );
+  }
   root.querySelector("#home-reports")!.innerHTML =
     d.reports.map(reportItem).join("") || "<p>No reports yet.</p>";
-  root.querySelector("#home-discussion")!.innerHTML =
-    d.discussion
-      .map(
-        (c: any) =>
-          `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`,
-      )
-      .join("") || "<p>No comments yet.</p>";
+  if (config.show_home_discussion)
+    root.querySelector("#home-discussion")!.innerHTML =
+      d.discussion
+        .map(
+          (c: any) =>
+            `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`,
+        )
+        .join("") || "<p>No comments yet.</p>";
 }
 async function crates() {
   const q = current().searchParams.get("q") || "";
@@ -359,6 +374,7 @@ function evidence(label: string, value: any) {
     : "";
 }
 function starButton(kind: string, c: any) {
+  if (!config.show_star_karma) return "";
   return `<div class="star-controls">${
     me?.user
       ? `<button class="star" data-star="${kind}" data-id="${esc(c.id)}" data-on="${!!c.my_star}" aria-pressed="${!!c.my_star}">${c.my_star ? "★ Starred" : "☆ Star"}</button>`
@@ -509,7 +525,7 @@ async function reportPage(id: number) {
   const version = c.revision_no;
   const history = [{ revision_no: version }];
   commentReply = null;
-  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reportBody(c)}${reportAPIs(c)}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p class="meta">${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""} · ${date(c.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reportBody(c)}${reportAPIs(c)}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   const historyBox = root.querySelector<HTMLElement>("#revision-history")!;
   const revisionSelect = root.querySelector<HTMLSelectElement>(
     '[name="revision_no"]',
@@ -707,8 +723,8 @@ async function termsUpdate(returnTo = "/account") {
   });
 }
 async function activity(id: string, own = false) {
-  const u = await request("/users/" + enc(id));
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${u.karma} karma · joined ${date(u.created_at)}</p><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><section id="reports"><h2>${own ? "My reports" : "Reports"}</h2><div id="claims"></div></section><section id="comments"><h2>${own ? "My comments" : "Comments"}</h2><div id="activity-comments"></div></section>${own ? '<section id="starred-reports"><h2>Starred reports</h2><div id="activity-starred-reports"></div></section><section id="starred-claims"><h2>Starred claims</h2><div id="activity-starred-claims"></div></section>' : ""}`;
+  const [u] = await Promise.all([request("/users/" + enc(id)), configReady]);
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${config.show_star_karma ? `${u.karma} karma · ` : ""}joined ${date(u.created_at)}</p><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><section id="reports"><h2>${own ? "My reports" : "Reports"}</h2><div id="claims"></div></section><section id="comments"><h2>${own ? "My comments" : "Comments"}</h2><div id="activity-comments"></div></section>${own && config.show_star_karma ? '<section id="starred-reports"><h2>Starred reports</h2><div id="activity-starred-reports"></div></section><section id="starred-claims"><h2>Starred claims</h2><div id="activity-starred-claims"></div></section>' : ""}`;
   await claimsList(
     own ? "/me/reports" : "/users/" + enc(u.id) + "/reports",
     root.querySelector("#claims")!,
@@ -717,7 +733,7 @@ async function activity(id: string, own = false) {
     own ? "/me/comments" : "/users/" + enc(u.id) + "/comments",
     root.querySelector("#activity-comments")!,
   );
-  if (own) {
+  if (own && config.show_star_karma) {
     await claimsList(
       "/me/starred-reports",
       root.querySelector("#activity-starred-reports")!,
@@ -726,6 +742,8 @@ async function activity(id: string, own = false) {
       "/me/starred-claims",
       root.querySelector("#activity-starred-claims")!,
     );
+  }
+  if (own) {
     const section = current().searchParams.get("section");
     if (
       section &&
@@ -885,21 +903,23 @@ function pageShell(page: string | undefined, id: string | undefined) {
     page === "crate" && id ? `<h1>${esc(id)}</h1>${loading}` : loading;
 }
 let startupError: unknown = null;
-const startupReady = Promise.allSettled([
-  request("/config", "GET", undefined, undefined, false).then((value) => {
+const configReady = request("/config", "GET", undefined, undefined, false).then(
+  (value) => {
     config = value;
-  }),
-  refreshMe(),
-]).then((results) => {
-  const failed = results.find(
-    (r): r is PromiseRejectedResult => r.status === "rejected",
-  );
-  if (failed) {
-    startupError = failed.reason;
-    document.querySelector("#account-nav")!.innerHTML =
-      '<span>Account information unavailable. <a href="">Reload</a></span>';
-  }
-});
+  },
+);
+const startupReady = Promise.allSettled([configReady, refreshMe()]).then(
+  (results) => {
+    const failed = results.find(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+    if (failed) {
+      startupError = failed.reason;
+      document.querySelector("#account-nav")!.innerHTML =
+        '<span>Account information unavailable. <a href="">Reload</a></span>';
+    }
+  },
+);
 async function route() {
   const generation = ++routeID;
   root.inert = false;
@@ -973,9 +993,12 @@ async function route() {
       );
       navigate("/api/" + a.id);
     } else if (p === "api") await apiPage(id);
-    else if ((p === "report" || p === "claim") && parts[2] === "stars")
-      await starsPage(p, id);
-    else if (p === "claim") await claimPage(id);
+    else if ((p === "report" || p === "claim") && parts[2] === "stars") {
+      await configReady;
+      if (generation !== routeID) throw new NavigationChanged();
+      if (config.show_star_karma) await starsPage(p, id);
+      else navigate(`/${p}/${enc(id)}`);
+    } else if (p === "claim") await claimPage(id);
     else if (p === "report") await reportPage(Number(id));
     else if (p === "reports") {
       root.innerHTML = `<h1>Reports</h1><div id="reports">${loading}</div>`;
@@ -994,7 +1017,11 @@ async function route() {
         "my-starred-claims",
       ].includes(p)
     ) {
-      location.replace("#/account?section=" + p.slice(3));
+      location.replace(
+        config.show_star_karma || !p.startsWith("my-starred-")
+          ? "#/account?section=" + p.slice(3)
+          : "#/account",
+      );
     } else if (p === "admin" && id === "catalogs") await adminCatalogs();
     else if (p === "settings") await settings();
     else if (p === "device") await devicePage();

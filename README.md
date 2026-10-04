@@ -107,3 +107,23 @@ catalogue through `POST /api/v1/admin/catalogs/:id/refresh`. Refresh fills displ
 metadata without changing existing API IDs or report references. Before refresh,
 the UI retains legacy paths and basic grouping; full external paths and blanket
 classification require the archived rustdoc metadata.
+
+### UI visibility flags
+
+`SHOW_STAR_KARMA` and `SHOW_HOME_DISCUSSION` are independent Worker variables,
+exposed by `/api/v1/config` as `show_star_karma` and `show_home_discussion`. Only
+the string `"true"` enables a flag; missing values default off. Both deployment
+configs currently set them to `"false"`. Redeploy with the relevant variable set
+to `"true"` to restore its UI.
+
+The first flag controls report/claim stars, stargazer pages, karma, personal
+starred lists, account menus and the Book's Star / Karma guidance. Old stargazer
+URLs return to their report/claim while hidden. The second controls Latest
+discussion and the desktop two-column homepage; mobile remains stacked. Comment
+counts, posting, replies and votes remain visible. Storage, API endpoints and
+privacy disclosures about retained/API-accessible reaction data are unchanged.
+
+Staging can also be deployed from a same-repository PR whose head branch starts
+with `staging/`. The existing staging workflow checks out its exact head commit
+and uses the staging environment; other PRs and fork PRs do not deploy. Manual
+workflow dispatch remains available.

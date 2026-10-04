@@ -18,11 +18,15 @@
     siteRoot,
     logout,
     onError,
+    showStarKarma = false,
   ) => {
     const link = (path, label) => `<a href="${siteRoot}#/${path}">${label}</a>`;
     container.innerHTML = me.user
       ? `<details><summary>${escapeHTML(me.user.username)}</summary><div class="profile-menu">${
-          link("account", `My activity (${escapeHTML(me.karma)} karma)`) +
+          link(
+            "account",
+            `My activity${showStarKarma ? ` (${escapeHTML(me.karma)} karma)` : ""}`,
+          ) +
           link("settings", "Settings") +
           (me.user.role === "admin" ? link("admin/catalogs", "Catalogs") : "")
         }<button id="logout">Sign out</button></div></details>`

@@ -713,3 +713,7 @@ textarea {
 .claim-report-context summary {
   text-decoration: underline;
 }
+
+.home-columns.home-single-column {
+  grid-template-columns: 1fr;
+}

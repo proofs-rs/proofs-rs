@@ -16,10 +16,6 @@ A Tool represents the verification tool used. Known limitations are recorded by 
 
 Comments allow public questions, objections, and responses concerning a Report. Discussion takes place at the Report level. Updates to a Report are preserved as Revisions, so earlier versions remain available for reference.
 
-## Star / Karma
-
-Stars express interest in or appreciation of Reports and Claims. In the current implementation, Karma counts Stars received from other users on Reports that are public and have not been withdrawn. Comment ratings are not included in the calculation. Both are intended as signals that help readers evaluate contributions.
-
 ## Reproduce
 
 Reproduce provides the information needed to rerun a verification, including the relevant Git commit, invocation, tool version, check results, and logs. Execution records are stored in SARIF format, while verification source code is referenced by a specific commit in an external repository. These records describe the contributor’s execution; they do not imply that proofs.rs has independently reproduced the result. In the future, the service may add automated reproduction or AI-assisted checks.

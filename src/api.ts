@@ -73,6 +73,8 @@ api.get(
       email_disabled: S.z.boolean(),
       email_configured: S.z.boolean(),
       terms_version: S.string,
+      show_star_karma: S.z.boolean(),
+      show_home_discussion: S.z.boolean(),
     }),
     { tags: ["System"], auth: "optional" },
   ),
@@ -86,6 +88,8 @@ api.get(
       email_configured:
         c.env.EMAIL_DISABLED !== "true" && !!(c.env.EMAIL && c.env.EMAIL_FROM),
       terms_version: c.env.TERMS_VERSION,
+      show_star_karma: c.env.SHOW_STAR_KARMA === "true",
+      show_home_discussion: c.env.SHOW_HOME_DISCUSSION === "true",
     }),
 );
 api.get(

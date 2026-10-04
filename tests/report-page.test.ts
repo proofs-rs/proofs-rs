@@ -39,7 +39,7 @@ for (const loggedIn of [false, true])
       source.indexOf("async function reportPage("),
       source.indexOf("async function loadComments("),
     );
-    const setup = `const root=document.querySelector('#app'); const me={user:loggedIn?{id:'bob'}:null};let commentReply=null;const current=()=>new URL('https://example.test/?v=1');const enc=encodeURIComponent;const esc=(x)=>String(x??'');const reportContent=(c)=>'<h1>'+c.title+'</h1>';const user=()=>'';const date=()=>'';const reproduceSection=()=>'';const claimItem=()=>'';const reportBody=()=>'';const reportAPIs=()=>'';const breadcrumbs=()=>'';const crateCrumbs=()=>[];const notice='';const bindReproduce=()=>{};const bindStars=()=>{};const bind=()=>{};`;
+    const setup = `const config={show_star_karma:false};const root=document.querySelector('#app'); const me={user:loggedIn?{id:'bob'}:null};let commentReply=null;const current=()=>new URL('https://example.test/?v=1');const enc=encodeURIComponent;const esc=(x)=>String(x??'');const reportContent=(c)=>'<h1>'+c.title+'</h1>';const user=()=>'';const date=()=>'';const reproduceSection=()=>'';const claimItem=()=>'';const reportBody=()=>'';const reportAPIs=()=>'';const breadcrumbs=()=>'';const crateCrumbs=()=>[];const notice='';const bindReproduce=()=>{};const bindStars=()=>{};const bind=()=>{};`;
     w.eval(
       transpileModule(setup + report + ";window.finished=reportPage(1);", {
         compilerOptions: {
