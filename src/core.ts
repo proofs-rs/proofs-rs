@@ -23,6 +23,8 @@ export interface Env {
   EMAIL_ALLOWLIST: string;
   ADMIN_GITHUB_IDS: string;
   TERMS_VERSION: string;
+  SHOW_STAR_KARMA?: string;
+  SHOW_HOME_DISCUSSION?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_D1_TOKEN?: string;
   DB_ID?: string;

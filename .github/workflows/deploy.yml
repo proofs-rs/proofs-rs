@@ -1,6 +1,8 @@
 name: Staging
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 concurrency:
@@ -8,6 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    # Only trusted staging/* PR branches may deploy using staging credentials.
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'staging/'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -19,6 +23,8 @@ jobs:
       WRANGLER_SEND_METRICS: "false"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -57,4 +63,4 @@ jobs:
       - name: Deployment summary
         run: |
           echo 'Staging deployed to ${{ steps.resources.outputs.url }}' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Commit: `${{ github.sha }}`' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Commit: `${{ github.event.pull_request.head.sha || github.sha }}`' >> "$GITHUB_STEP_SUMMARY"

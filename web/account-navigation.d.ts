@@ -5,5 +5,6 @@ interface Window {
     siteRoot: string,
     logout: () => Promise<void>,
     onError: (error: unknown) => void,
+    showStarKarma?: boolean,
   ): void;
 }

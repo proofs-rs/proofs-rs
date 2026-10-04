@@ -3,9 +3,7 @@
   "name": "proofs-rs",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-21",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "assets": {
     "directory": "dist",
@@ -20,7 +18,9 @@
     "EMAIL_ALLOWLIST": "",
     "ADMIN_GITHUB_IDS": "540144",
     "TERMS_VERSION": "2026-09-21",
-    "EMAIL_DISABLED": "true"
+    "EMAIL_DISABLED": "true",
+    "SHOW_STAR_KARMA": "false",
+    "SHOW_HOME_DISCUSSION": "false"
   },
   "d1_databases": [
     {
@@ -53,10 +53,7 @@
     ]
   },
   "triggers": {
-    "crons": [
-      "*/5 * * * *",
-      "17 2 * * *"
-    ]
+    "crons": ["*/5 * * * *", "17 2 * * *"]
   },
   "observability": {
     "enabled": true

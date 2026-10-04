@@ -162,6 +162,8 @@ export async function fixture(seedTools = true) {
     APP_ORIGIN: "https://example.test",
     ADMIN_GITHUB_IDS: "3",
     TERMS_VERSION: "test",
+    SHOW_STAR_KARMA: "true",
+    SHOW_HOME_DISCUSSION: "true",
     EMAIL_ALLOWLIST: "",
     ARCHIVE: {
       put: async () => {},
@@ -1321,9 +1323,18 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
         ";return {reproduceSection,bindReproduce};})();",
     );
   w.eval(
-    transpileModule(legal + "\n" + main, {
-      compilerOptions: { module: ModuleKind.None, target: ScriptTarget.ES2022 },
-    }).outputText,
+    transpileModule(
+      legal +
+        "\n" +
+        main +
+        ";window.setUIFlags=(stars,discussion)=>{config.show_star_karma=stars;config.show_home_discussion=discussion};",
+      {
+        compilerOptions: {
+          module: ModuleKind.None,
+          target: ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
   );
   async function until(selector: string) {
     for (let n = 0; n < 100; n++) {
@@ -1616,6 +1627,64 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
     await until("details.tool-limitations");
     assert.equal(w.document.querySelector("#app script"), null);
     assert.equal(w.eval('toolLimitations({tool_limitations:""})'), "");
+    // Both UI flags are independent; hidden reactions leave discussion information intact.
+    (w as any).setUIFlags(false, false);
+    await w.eval("refreshMe()");
+    assert.equal(
+      w.document.querySelector('#account-nav a[href="#/account"]')!.textContent,
+      "My activity",
+    );
+    w.location.hash = "/";
+    await until("#home-reports .claim-item");
+    assert.equal(w.document.querySelector("#home-discussion"), null);
+    assert.ok(w.document.querySelector(".home-single-column"));
+    assert.doesNotMatch(
+      w.document.querySelector("#home-reports")!.textContent!,
+      /stars|karma/,
+    );
+    assert.match(
+      w.document.querySelector("#home-reports")!.textContent!,
+      /\d+ comments/,
+    );
+    (w as any).setUIFlags(false, true);
+    await w.eval("route()");
+    assert.ok(w.document.querySelector("#home-discussion"));
+    assert.doesNotMatch(
+      w.document.querySelector("#home-reports")!.textContent!,
+      /stars|karma/,
+    );
+    (w as any).setUIFlags(true, false);
+    await w.eval("route()");
+    assert.equal(w.document.querySelector("#home-discussion"), null);
+    assert.match(
+      w.document.querySelector("#home-reports")!.textContent!,
+      /stars/,
+    );
+    (w as any).setUIFlags(false, false);
+    w.location.hash = "/report/1/stars";
+    await until("#discussion");
+    assert.equal(w.location.hash, "#/report/1");
+    assert.equal(w.document.querySelector(".star-controls"), null);
+    assert.doesNotMatch(
+      w.document.querySelector("#app")!.textContent!,
+      /karma/,
+    );
+    assert.match(
+      w.document.querySelector("#discussion h2")!.textContent!,
+      /Comments \(\d+\)/,
+    );
+    w.location.hash = claimLink.split("?")[0].slice(1) + "/stars";
+    await until(".signature");
+    assert.equal(w.location.hash, claimLink.split("?")[0]);
+    assert.equal(w.document.querySelector(".star-controls"), null);
+    w.location.hash = "/account";
+    await until("#activity-comments");
+    assert.equal(w.document.querySelector("#starred-reports"), null);
+    assert.equal(w.document.querySelector("#starred-claims"), null);
+    assert.doesNotMatch(
+      w.document.querySelector("#app")!.textContent!,
+      /stars|karma/,
+    );
     signedInUser = "";
     await w.eval("refreshMe()");
     assert.equal(
@@ -1913,11 +1982,12 @@ test("static page content renders before requests, remains usable, and survives 
     assert.equal(d.querySelector("h1")!.textContent, "proofs.rs");
     assert.deepEqual(
       Array.from(d.querySelectorAll(".home-columns h2"), (x) => x.textContent),
-      ["Recent reports", "Latest discussion"],
+      ["Recent reports"],
     );
     assert.equal((d.querySelector("#app") as any).inert, false);
     const input = d.querySelector("#search input") as any;
     input.value = "typed while loading";
+    finish("/config", { oauth_configured: true, terms_version: "test" });
     finish("/home", { reports: [], discussion: [] });
     await tick();
     assert.equal(
@@ -1928,7 +1998,7 @@ test("static page content renders before requests, remains usable, and survives 
       d.querySelector("#home-reports")!.textContent,
       "No reports yet.",
     );
-    assert.ok(pending.has("/api/v1/config"));
+    assert.ok(!pending.has("/api/v1/config"));
     assert.ok(pending.has("/api/v1/me"));
     w.location.hash = "/publish";
     await tick();
@@ -1967,7 +2037,6 @@ test("static page content renders before requests, remains usable, and survives 
     await tick();
     assert.equal(d.body.dataset.bookRedirect, "/book/");
     assert.ok(d.querySelector('#app a[href="/book/"]'));
-    finish("/config", { oauth_configured: true, terms_version: "test" });
     finish("/me", { user: null });
     await tick();
     assert.ok(d.querySelector('#account-nav a[href="/auth/github"]'));
@@ -3171,4 +3240,23 @@ test("crate API catalogue returns all entries and counts active claims", async (
       .body.items.length,
     40,
   );
+});
+
+test("UI visibility configuration defaults off and exposes independent flags without changing stored reactions", async () => {
+  const { env, request } = await fixture();
+  for (const value of [undefined, "false", "TRUE", "1"]) {
+    env.SHOW_STAR_KARMA = value;
+    env.SHOW_HOME_DISCUSSION = value;
+    const { body } = await request("/config");
+    assert.equal(body.show_star_karma, false);
+    assert.equal(body.show_home_discussion, false);
+  }
+  for (const star of [false, true])
+    for (const discussion of [false, true]) {
+      env.SHOW_STAR_KARMA = String(star);
+      env.SHOW_HOME_DISCUSSION = String(discussion);
+      const { body } = await request("/config");
+      assert.equal(body.show_star_karma, star);
+      assert.equal(body.show_home_discussion, discussion);
+    }
 });
