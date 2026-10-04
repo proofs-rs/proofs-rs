@@ -24,7 +24,7 @@ Practical formal verification usually depends on some degree of abstraction or t
 
 Whether a specification is adequate and whether a given trust boundary is acceptable cannot be settled by the formal proof alone. Testing and AI-assisted analysis can help assess both, but ultimately qualified experts must judge whether the result is sufficient for its intended use. Users must therefore also decide whose judgment they are prepared to trust.
 
-proofs.rs makes the evidence and discussion needed to assess verification results publicly available. Review may concern not only the proof itself, but also the specification, assumptions, verification scope, tool limitations, and reproducibility. Publication is not a certification of correctness; it is a means of enabling independent scrutiny. Readers can inspect what issues were raised, how authors responded, what remains unresolved, and the previous contributions of those taking part in the discussion. User scores provide an additional signal derived from contributions to the community, helping readers decide whose judgments deserve greater weight.
+proofs.rs makes the evidence and discussion needed to assess verification results publicly available. Review may concern not only the proof itself, but also the specification, assumptions, verification scope, tool limitations, and reproducibility. Publication is not a certification of correctness; it is a means of enabling independent scrutiny. Readers can inspect what issues were raised, how authors responded, what remains unresolved, and the previous contributions of those taking part in the discussion.<span data-star-karma-score></span>
 
 ## Position and policy
 

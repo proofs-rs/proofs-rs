@@ -16,6 +16,14 @@
       if (!response.ok) throw new Error("Unable to load configuration");
       const config = await response.json();
       showStarKarma = config.show_star_karma === true;
+      if (showStarKarma) {
+        document
+          .querySelectorAll("[data-star-karma-score]")
+          .forEach((element) => {
+            element.textContent =
+              " User scores provide an additional signal derived from contributions to the community, helping readers decide whose judgments deserve greater weight.";
+          });
+      }
       if (showStarKarma && location.pathname.endsWith("/concepts.html")) {
         const anchor = document.getElementById("reproduce")?.closest("h2");
         if (anchor) {

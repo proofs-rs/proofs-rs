@@ -7,7 +7,7 @@ for (const showStarKarma of [false, true])
   for (const signedIn of [false, true]) {
     test(`Book account navigation and logout (signed in: ${signedIn}, reactions: ${showStarKarma})`, async () => {
       const dom = new JSDOM(
-        '<div id="account-nav"><a href="/#/account">Account</a></div><h2 id="reproduce">Reproduce</h2>',
+        '<div id="account-nav"><a href="/#/account">Account</a></div><p>Readers can inspect past contributions.<span data-star-karma-score></span></p><h2 id="reproduce">Reproduce</h2>',
         {
           url: "https://example.test/book/concepts.html",
           runScripts: "outside-only",
@@ -51,6 +51,12 @@ for (const showStarKarma of [false, true])
         }
         await new Promise((resolve) => setTimeout(resolve, 20));
         assert.equal(!!w.document.querySelector("#star--karma"), showStarKarma);
+        assert.equal(
+          w.document.querySelector("[data-star-karma-score]")!.textContent,
+          showStarKarma
+            ? " User scores provide an additional signal derived from contributions to the community, helping readers decide whose judgments deserve greater weight."
+            : "",
+        );
         if (signedIn) {
           assert.equal(w.document.querySelector("img"), null);
           const menu = w.document.querySelector("details")!;
