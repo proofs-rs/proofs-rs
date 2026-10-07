@@ -716,4 +716,6 @@ textarea {
 
 .home-columns.home-single-column {
   grid-template-columns: 1fr;
+  max-width: 600px;
+  margin-inline: auto;
 }
