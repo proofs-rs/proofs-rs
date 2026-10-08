@@ -314,7 +314,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       );
       return result(
         `${id} ${version}`,
-        `${breadcrumbs([{ label: "crates", href: "/crates" }])}<h1>${esc(id)} ${esc(version)}</h1>${releases.description ? `<p>${esc(releases.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(id)}/${enc(version)}" target="_blank" rel="noopener noreferrer">crates.io</a></p><form method="get" action="/crate/${enc(id)}"><label>Version <select name="version" aria-label="Version">${releases.items.map((r: any) => `<option value="${esc(r.version)}"${r.version === version ? " selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label> <button>Go</button></form><h2 id="apis">APIs (${apis.items.length})</h2>${renderAPICatalog(apis.items, id)}<h2 id="reports">Reports (${counts[0].n})</h2>${reports}`,
+        `${breadcrumbs([{ label: "crates", href: "/crates" }])}<h1>${esc(id)} ${esc(version)}</h1>${releases.description ? `<p>${esc(releases.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(id)}/${enc(version)}" target="_blank" rel="noopener noreferrer">crates.io</a></p><form method="get" action="/crate/${enc(id)}" data-version-selector><label>Version <select name="version" aria-label="Version">${releases.items.map((r: any) => `<option value="${esc(r.version)}"${r.version === version ? " selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label></form><h2 id="apis">APIs (${apis.items.length})</h2>${renderAPICatalog(apis.items, id)}<h2 id="reports">Reports (${counts[0].n})</h2>${reports}`,
       );
     }
     if (p === "api" && id) {

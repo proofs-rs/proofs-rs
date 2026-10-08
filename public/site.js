@@ -5,4 +5,11 @@
     if (url.origin === location.origin)
       location.replace(url.pathname + url.search + url.hash);
   }
+  for (const form of document.querySelectorAll("form[data-version-selector]")) {
+    form
+      .querySelector('select[name="version"]')
+      .addEventListener("change", () => {
+        form.requestSubmit();
+      });
+  }
 })();
