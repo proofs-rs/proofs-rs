@@ -1,3 +1,4 @@
+import { isSitePage, sitePage, siteAction, bookPage } from "./site";
 import { generateSpecs } from "hono-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
 import { documentation } from "./openapi";
@@ -69,6 +70,27 @@ app.get(
 app.get("/api/docs/", (c) => c.redirect("/api/docs", 308));
 for (const path of ["/docs/api", "/docs/api/", "/docs/api/index.html"])
   app.get(path, (c) => c.redirect("/api/docs", 308));
+app.get("/index.html", (c) => c.redirect("/", 308));
+// HTML routes are separate from the documented JSON API. Internal calls keep all
+// API authentication, validation, origin, CSRF and visibility checks in one place.
+app.use("*", async (c, next) => {
+  const siteFetch = async (request: Request) => {
+    let ctx: typeof c.executionCtx | undefined;
+    try {
+      ctx = c.executionCtx;
+    } catch {
+      /* app.request tests have no execution context. */
+    }
+    return app.fetch(request, c.env, ctx);
+  };
+  if (c.req.method === "POST" && c.req.path.startsWith("/_actions/"))
+    return siteAction(c, siteFetch);
+  if (["GET", "HEAD"].includes(c.req.method) && c.req.path.startsWith("/book/"))
+    return bookPage(c, await c.env.ASSETS.fetch(c.req.raw), siteFetch);
+  if (["GET", "HEAD"].includes(c.req.method) && isSitePage(c.req.path))
+    return sitePage(c, siteFetch);
+  await next();
+});
 app.use("/api/*", async (c, next) => {
   await authenticate(c);
   await next();

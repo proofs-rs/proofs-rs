@@ -67,10 +67,21 @@ export async function authenticate(c: Ctx) {
 }
 const signupCookie = (c: Ctx) =>
   secure(c) ? "__Host-proofsr_signup" : "proofsr_signup";
-const safeReturn = (v: string | undefined) =>
-  v && v.startsWith("/#/") && v.length <= 2000 && !/[\r\n]/.test(v)
-    ? v
-    : "/#/account";
+const safeReturn = (value: string | undefined) => {
+  const v = value?.startsWith("/#/") ? value.slice(2) : value;
+  if (
+    !v ||
+    v.length > 2000 ||
+    !v.startsWith("/") ||
+    v.startsWith("//") ||
+    /[\\\r\n]/.test(v)
+  )
+    return "/account";
+  const url = new URL(v, "https://local");
+  return url.origin === "https://local"
+    ? url.pathname + url.search
+    : "/account";
+};
 async function finishLogin(
   c: Ctx,
   user: any,
@@ -351,11 +362,11 @@ export function authRoutes() {
           path: "/",
           maxAge: 600,
         });
-        return c.redirect("/#/signup");
+        return c.redirect("/signup");
       }
       await finishLogin(c, user, email, Array.isArray(emails), existing);
       return c.redirect(
-        back === "/#/account" && !er.ok ? "/#/settings?email=retry" : back,
+        back === "/account" && !er.ok ? "/settings?email=retry" : back,
       );
     },
   );

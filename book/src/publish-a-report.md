@@ -67,7 +67,7 @@ cargo proofs publish
 
 The CLI prints a link to your published report. Run `cargo proofs publish` again to update the same report.
 
-Using another tool? See [Tools](/#/tools) for supported tools and instructions.
+Using another tool? See [Tools](/tools) for supported tools and instructions.
 
 [CLI documentation →](https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md)
 

@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
-import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
+import { renderRecordedRun } from "../web/recorded-run";
 
-test("Reproduce starts collapsed, loads immediately, links claims and safely renders output", async () => {
+test("recorded runs render complete HTML, link claims and safely escape output", async () => {
   const dom = new JSDOM('<main id="app"></main>', {
     url: "https://proofs.rs",
     runScripts: "outside-only",
@@ -78,26 +77,19 @@ test("Reproduce starts collapsed, loads immediately, links claims and safely ren
       text: async () => "<img src=x onerror=bad()>",
     };
   };
-  w.eval(
-    transpileModule(
-      readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
-        .replaceAll("export function", "function")
-        .replace(
-          'import { prop } from "./properties";',
-          readFileSync(
-            new URL("../web/properties.ts", import.meta.url),
-            "utf8",
-          ).replaceAll("export ", ""),
-        ),
-      {
-        compilerOptions: {
-          module: ModuleKind.None,
-          target: ScriptTarget.ES2022,
-        },
-      },
-    ).outputText +
-      `\nconst root = document.querySelector('#app'); root.innerHTML = reproduceSection(['run-1']); bindReproduce(root, {id: 42, revision_no: 2, run_ids: ['run-1'], claims: [{id: 17, display_path: 'demo::f', property: 'no_ub'}]});`,
-  );
+  const sarif = await (
+    await (w as any).fetch("/api/v1/runs/run-1/sarif")
+  ).json();
+  const report = {
+    id: 42,
+    revision_no: 2,
+    run_ids: ["run-1"],
+    claims: [{ id: 17, display_path: "demo::f", property: "no_ub" }],
+  };
+  w.document.querySelector("#app")!.innerHTML =
+    "<details><summary>Reproduce</summary>" +
+    renderRecordedRun(sarif, "run-1", 0, report, true) +
+    "</details>";
   const section = w.document.querySelector("details")!;
   assert.equal(section.open, false);
   assert.equal(calls.length, 1);
@@ -114,7 +106,7 @@ test("Reproduce starts collapsed, loads immediately, links claims and safely ren
   );
   assert.equal(
     w.document.querySelector("td a")!.getAttribute("href"),
-    "#/claim/17?report_revision=2",
+    "/claim/17?report_revision=2",
   );
   assert.ok(
     w.document

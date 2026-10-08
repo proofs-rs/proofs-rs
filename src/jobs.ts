@@ -181,7 +181,7 @@ async function deliver(env: Env, id: string) {
   }
   const unsubscribe =
     env.APP_ORIGIN +
-    "/#/unsubscribe?user=" +
+    "/unsubscribe?user=" +
     encodeURIComponent(d.user_id) +
     "&signature=" +
     (await signToken(env, "unsubscribe:" + d.user_id));
@@ -200,7 +200,7 @@ async function deliver(env: Env, id: string) {
       from: env.EMAIL_FROM,
       to: contact.address,
       subject: `New comment on proofs.rs report #${cm.report_id}`,
-      text: `${cm.username || "ghost"} posted a comment.\n\n${env.APP_ORIGIN}/#/report/${cm.report_id}?comment=${cm.id}\n\nEmail settings: ${env.APP_ORIGIN}/#/settings\nUnsubscribe: ${unsubscribe}`,
+      text: `${cm.username || "ghost"} posted a comment.\n\n${env.APP_ORIGIN}/report/${cm.report_id}?comment=${cm.id}\n\nEmail settings: ${env.APP_ORIGIN}/settings\nUnsubscribe: ${unsubscribe}`,
     });
     await stmt(
       db,
