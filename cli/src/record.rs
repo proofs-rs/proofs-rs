@@ -43,6 +43,10 @@ pub fn load(project: &Project, selected: Option<&str>) -> Result<(PathBuf, Recor
         state::read(&dir.join("run.sarif.json"))?.context("Recorded run not found")?;
     let entry = &sarif["runs"][0];
     let proof = &entry["properties"]["proofs"];
+    ensure!(
+        proof["schemaVersion"] == 2 && proof["dependencies"].is_array(),
+        "Recorded run lacks a version 2 dependency snapshot; record verification again"
+    );
     let contracts: Vec<Contract> = serde_json::from_value(proof["contracts"].clone())?;
     ensure!(
         entry["automationDetails"]["guid"].as_str() == dir.file_name().and_then(|s| s.to_str()),
@@ -153,7 +157,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         &root,
         source_ref["commit"].as_str().context("Missing commit")?,
     )?;
-    let source = checkout.path.clone();
+    let source = checkout.path.canonicalize()?;
     ensure!(
         source.join(&relative_manifest).exists()
             && source
@@ -162,33 +166,116 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
                 .exists(),
         "Snapshot is missing Cargo.toml or Cargo.lock"
     );
-    // Resolve the copied project, never the user's mutable checkout.
-    let resolved: Value = serde_json::from_str(&output(
-        Command::new("cargo")
-            .args([
-                "metadata",
-                "--locked",
-                "--format-version",
-                "1",
-                "--manifest-path",
-            ])
-            .arg(source.join(&relative_manifest))
-            .current_dir(&source),
-    )?)?;
+    let mut selected = args.clone();
+    selected.manifest_path = Some(source.join(&relative_manifest));
+    apply_cargo_flags(&mut selected, &command)?;
+    let prefix = format!("{}/", project.name);
+    for feature in &mut selected.features {
+        if let Some(local) = feature.strip_prefix(&prefix) {
+            *feature = local.to_owned();
+        }
+    }
+    let mut metadata_command = Command::new("cargo");
+    metadata_command
+        .args([
+            "metadata",
+            "--locked",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(source.join(&relative_manifest))
+        .current_dir(&source);
+    if !selected.features.is_empty() {
+        metadata_command.arg("--features").arg(
+            selected
+                .features
+                .iter()
+                .map(|f| {
+                    if f.contains('/') {
+                        f.clone()
+                    } else {
+                        format!(
+                            "{}/{f}",
+                            selected.package.as_deref().unwrap_or(&project.name)
+                        )
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+    }
+    if selected.all_features {
+        metadata_command.arg("--all-features");
+    }
+    if selected.no_default_features {
+        metadata_command.arg("--no-default-features");
+    }
+    let platform = if let Some(target) = &selected.target {
+        target.clone()
+    } else {
+        output(Command::new("rustc").arg("-vV"))?
+            .lines()
+            .find_map(|line| line.strip_prefix("host: "))
+            .context("Missing rustc host")?
+            .to_owned()
+    };
+    metadata_command.arg("--filter-platform").arg(&platform);
+    let resolved: Value = serde_json::from_str(&output(&mut metadata_command)?)?;
     for package in resolved["packages"]
         .as_array()
         .context("Missing packages")?
     {
         if package["source"].is_null() {
             ensure!(
-                Path::new(package["manifest_path"].as_str().unwrap_or("")).starts_with(&source),
+                Path::new(
+                    package["manifest_path"]
+                        .as_str()
+                        .context("Missing local package manifest")?
+                )
+                .canonicalize()?
+                .starts_with(&source),
                 "Local dependencies must be contained in the source root"
             );
         }
     }
-    let mut selected = args.clone();
-    selected.manifest_path = Some(source.join(&relative_manifest));
-    apply_cargo_flags(&mut selected, &command)?;
+    // Metadata unifies features across every workspace member. Cargo tree selects
+    // the actual verification package, avoiding sibling-only optional dependencies.
+    let mut tree_command = Command::new("cargo");
+    tree_command
+        .args([
+            "tree",
+            "--locked",
+            "--prefix",
+            "none",
+            "--format",
+            "{p}",
+            "--edges",
+            "normal,build,dev",
+            "--manifest-path",
+        ])
+        .arg(source.join(&relative_manifest))
+        .args(["--package", &project.name, "--target", &platform])
+        .current_dir(&source)
+        .env("CARGO_TERM_COLOR", "never");
+    if !selected.features.is_empty() {
+        tree_command
+            .arg("--features")
+            .arg(selected.features.join(","));
+    }
+    if selected.all_features {
+        tree_command.arg("--all-features");
+    }
+    if selected.no_default_features {
+        tree_command.arg("--no-default-features");
+    }
+    let scoped = scope_metadata(&resolved, &output(&mut tree_command)?)?;
+    let dependencies = dependency_snapshot(
+        &scoped,
+        &project.name,
+        &source.join(&relative_manifest),
+        &source,
+    )?;
     let mut captured = Project::load(&selected)?;
     captured.cfg.insert(config.tool.name.clone());
     ensure!(
@@ -282,7 +369,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     artifacts.push(json!({"contents":{"text":stdout}}));
     invocation["stderr"] = json!({"index":artifacts.len()});
     artifacts.push(json!({"contents":{"text":stderr}}));
-    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":artifacts,"versionControlProvenance":[{"repositoryUri":source_ref["repository"],"revisionId":source_ref["commit"]}],"automationDetails":{"guid":rid},"properties":{"proofs":{"schemaVersion":1,"crate":project.name,"version":project.version,"contracts":verified,"target":config.tool.target,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"recorderVersion":env!("CARGO_PKG_VERSION")}}}]});
+    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":artifacts,"versionControlProvenance":[{"repositoryUri":source_ref["repository"],"revisionId":source_ref["commit"]}],"automationDetails":{"guid":rid},"properties":{"proofs":{"schemaVersion":2,"dependencies":dependencies,"crate":project.name,"version":project.version,"contracts":verified,"target":config.tool.target,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"recorderVersion":env!("CARGO_PKG_VERSION")}}}]});
     let bytes = serde_json::to_vec_pretty(&sarif)?;
     fs::write(dir.join("run.sarif.json"), &bytes)?;
     ensure!(
@@ -298,6 +385,149 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         diagnostic.unwrap_or_default()
     );
     Ok(())
+}
+fn scope_metadata(metadata: &Value, tree: &str) -> Result<Value> {
+    let packages = metadata["packages"]
+        .as_array()
+        .context("Missing packages")?;
+    let mut ids = std::collections::BTreeSet::new();
+    for line in tree.lines().filter(|line| !line.trim().is_empty()) {
+        let line = line.trim().strip_suffix(" (*)").unwrap_or(line.trim());
+        let line = line.strip_suffix(" (proc-macro)").unwrap_or(line);
+        let mut words = line.split_whitespace();
+        let name = words.next().context("Missing cargo tree package name")?;
+        let version = words
+            .next()
+            .and_then(|v| v.strip_prefix('v'))
+            .context("Invalid cargo tree package version")?;
+        let mut matches: Vec<_> = packages
+            .iter()
+            .filter(|p| p["name"] == name && p["version"] == version)
+            .collect();
+        if matches.len() > 1 {
+            matches.retain(|p| {
+                if p["source"].is_null() {
+                    p["manifest_path"]
+                        .as_str()
+                        .and_then(|v| Path::new(v).parent())
+                        .is_some_and(|path| {
+                            line.strip_prefix(&format!("{name} v{version} ("))
+                                .and_then(|suffix| suffix.strip_suffix(')'))
+                                .is_some_and(|tree_path| {
+                                    crate::config::same_path(path, Path::new(tree_path))
+                                })
+                        })
+                } else if p["source"] == "registry+https://github.com/rust-lang/crates.io-index" {
+                    line == format!("{name} v{version}")
+                } else {
+                    p["source"].as_str().is_some_and(|source| {
+                        let source = source
+                            .strip_prefix("git+")
+                            .or_else(|| source.strip_prefix("registry+"))
+                            .unwrap_or(source);
+                        let url = source.split('#').next().unwrap_or(source);
+                        line.contains(url)
+                    })
+                }
+            });
+        }
+        ensure!(
+            matches.len() == 1,
+            "Cannot uniquely attribute cargo tree package {line} to locked Cargo metadata"
+        );
+        ids.insert(
+            matches[0]["id"]
+                .as_str()
+                .context("Missing package ID")?
+                .to_owned(),
+        );
+    }
+    let mut scoped = metadata.clone();
+    scoped["packages"]
+        .as_array_mut()
+        .context("Missing packages")?
+        .retain(|p| p["id"].as_str().is_some_and(|id| ids.contains(id)));
+    Ok(scoped)
+}
+fn dependency_snapshot(
+    metadata: &Value,
+    name: &str,
+    manifest: &Path,
+    source_root: &Path,
+) -> Result<Vec<Value>> {
+    let manifest = manifest
+        .canonicalize()
+        .context("Resolve selected package manifest")?;
+    let source_root = source_root.canonicalize().context("Resolve source root")?;
+    let packages = metadata["packages"]
+        .as_array()
+        .context("Missing packages")?;
+    let selected = packages
+        .iter()
+        .find(|p| {
+            p["name"] == name
+                && p["manifest_path"]
+                    .as_str()
+                    .is_some_and(|v| crate::config::same_path(Path::new(v), &manifest))
+        })
+        .context("Missing selected package")?;
+    let nodes = metadata["resolve"]["nodes"]
+        .as_array()
+        .context("Missing dependency resolution")?;
+    let root = selected["id"].as_str().context("Missing package ID")?;
+    let mut reached = std::collections::BTreeSet::new();
+    let mut queue = vec![root];
+    while let Some(id) = queue.pop() {
+        if !reached.insert(id) {
+            continue;
+        }
+        let node = nodes
+            .iter()
+            .find(|n| n["id"] == id)
+            .context("Missing resolved node")?;
+        for dep in node["deps"]
+            .as_array()
+            .context("Missing resolved dependencies")?
+        {
+            queue.push(dep["pkg"].as_str().context("Missing dependency ID")?);
+        }
+    }
+    let mut snapshot: Vec<Value> = packages
+        .iter()
+        .filter(|p| {
+            p["id"]
+                .as_str()
+                .is_some_and(|id| id != root && reached.contains(id))
+        })
+        .map(|p| {
+            let source = if let Some(source) = p["source"].as_str() {
+                source.to_owned()
+            } else {
+                let manifest = Path::new(
+                    p["manifest_path"]
+                        .as_str()
+                        .context("Missing dependency manifest")?,
+                )
+                .canonicalize()
+                .context("Resolve dependency manifest")?;
+                let relative = manifest
+                    .parent()
+                    .context("Missing dependency directory")?
+                    .strip_prefix(&source_root)
+                    .context("Path dependency outside source root")?;
+                format!("path+{}", path_string(relative))
+            };
+            Ok(json!({"crate":p["name"], "version":p["version"], "source":source}))
+        })
+        .collect::<Result<_>>()?;
+    snapshot.sort_by_key(|p| {
+        (
+            p["crate"].to_string(),
+            p["version"].to_string(),
+            p["source"].to_string(),
+        )
+    });
+    Ok(snapshot)
 }
 fn path_string(path: &Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
@@ -378,28 +608,54 @@ fn validate_command(cmd: &[String], creusot: bool) -> Result<()> {
 }
 fn apply_cargo_flags(args: &mut ProjectArgs, cmd: &[String]) -> Result<()> {
     let mut i = 2;
+    let mut package_seen = false;
+    let mut target_seen = false;
     while i < cmd.len() {
         let a = &cmd[i];
-        let (flag, inline) = a
-            .split_once('=')
-            .map_or((a.as_str(), None), |(k, v)| (k, Some(v)));
-        if matches!(flag, "--features" | "--target" | "--package" | "-p") {
-            let v = if let Some(v) = inline {
-                v.to_owned()
+        ensure!(
+            a != "--",
+            "Nested -- options cannot be attributed reliably when recording"
+        );
+        let (flag, inline) = if let Some(value) = a.strip_prefix("-F").filter(|v| !v.is_empty()) {
+            ("--features", Some(value.trim_start_matches('=')))
+        } else if let Some(value) = a.strip_prefix("-p").filter(|v| !v.is_empty()) {
+            ("--package", Some(value.trim_start_matches('=')))
+        } else {
+            a.split_once('=')
+                .map_or((a.as_str(), None), |(k, v)| (k, Some(v)))
+        };
+        ensure!(!matches!(flag, "--manifest-path" | "--workspace" | "--all" | "--exclude"), "Unsupported package selection option {flag}; select one package with cargo proofs -p NAME");
+        if matches!(flag, "--features" | "-F" | "--target" | "--package" | "-p") {
+            let value = if let Some(value) = inline {
+                value.to_owned()
             } else {
                 i += 1;
                 cmd.get(i).context("Missing Cargo option value")?.clone()
             };
+            ensure!(
+                !value.is_empty() && !value.starts_with('-'),
+                "Missing Cargo option value for {flag}"
+            );
             match flag {
-                "--features" => {
-                    args.features = v
+                "--features" | "-F" => args.features.extend(
+                    value
                         .split([',', ' '])
-                        .filter(|s| !s.is_empty())
-                        .map(String::from)
-                        .collect()
+                        .filter(|v| !v.is_empty())
+                        .map(String::from),
+                ),
+                "--target" => {
+                    ensure!(
+                        !target_seen,
+                        "Multiple compilation targets are unsupported when recording"
+                    );
+                    target_seen = true;
+                    args.target = Some(value);
                 }
-                "--target" => args.target = Some(v),
-                _ => args.package = Some(v),
+                _ => {
+                    ensure!(!package_seen, "Select exactly one verification package");
+                    package_seen = true;
+                    args.package = Some(value);
+                }
             }
         }
         if flag == "--all-features" {
@@ -667,6 +923,235 @@ mod tests {
     }
     fn output(status: &str, outcome: &str) -> String {
         format!("Checking harness demo::check_f...\nRESULTS:\nCheck 1: f.pointer.1\n - Status: {status}\n - Description: \"pointer check\"\n - Location: src/lib.rs:1:2 in function f\nVERIFICATION:- {outcome}\n")
+    }
+    fn empty_project_args() -> ProjectArgs {
+        ProjectArgs {
+            manifest_path: None,
+            package: None,
+            features: vec![],
+            all_features: false,
+            no_default_features: false,
+            target: None,
+        }
+    }
+    #[test]
+    fn cargo_flags_accumulate_features_and_reject_ambiguous_selection() {
+        let mut args = empty_project_args();
+        let command = [
+            "cargo",
+            "kani",
+            "-pdemo",
+            "-Fa,b",
+            "--features",
+            "c",
+            "-F=d",
+            "--target=wasm32-unknown-unknown",
+        ];
+        apply_cargo_flags(&mut args, &command.map(String::from)).unwrap();
+        assert_eq!(args.features, ["a", "b", "c", "d"]);
+        assert_eq!(args.package.as_deref(), Some("demo"));
+        assert_eq!(args.target.as_deref(), Some("wasm32-unknown-unknown"));
+        for flags in [
+            vec!["--workspace"],
+            vec!["--manifest-path=other/Cargo.toml"],
+            vec!["-pa", "-pb"],
+            vec!["--target=a", "--target=b"],
+            vec!["--"],
+        ] {
+            let command: Vec<_> = ["cargo", "kani"]
+                .into_iter()
+                .chain(flags)
+                .map(String::from)
+                .collect();
+            assert!(apply_cargo_flags(&mut empty_project_args(), &command).is_err());
+        }
+    }
+    #[test]
+    fn cargo_workspace_snapshot_scopes_features_renames_and_target() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers=['demo','sibling','optional','platform']\nresolver='2'\n",
+        )
+        .unwrap();
+        for (name, extra) in [
+            ("demo", "[dependencies]\nrenamed={package='optional',path='../optional',optional=true}\n[features]\nextra=['dep:renamed']\n[target.'cfg(windows)'.dependencies]\nplatform={path='../platform'}\n"),
+            ("sibling", "[dependencies]\ndemo={path='../demo',features=['extra']}\n"),
+            ("optional", ""), ("platform", "")
+        ] {
+            fs::create_dir_all(root.join(name).join("src")).unwrap();
+            fs::write(root.join(name).join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+            fs::write(root.join(name).join("Cargo.toml"), format!("[package]\nname='{name}'\nversion='1.0.0'\nedition='2021'\n{extra}")).unwrap();
+        }
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let metadata: Value = serde_json::from_str(
+            &super::output(
+                Command::new(&cargo)
+                    .args([
+                        "metadata",
+                        "--offline",
+                        "--format-version",
+                        "1",
+                        "--filter-platform",
+                        "x86_64-unknown-linux-gnu",
+                    ])
+                    .current_dir(root),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        for (platform, feature, expected) in [
+            ("x86_64-unknown-linux-gnu", false, vec![]),
+            ("x86_64-unknown-linux-gnu", true, vec!["optional"]),
+            ("x86_64-pc-windows-msvc", false, vec!["platform"]),
+        ] {
+            let mut command = Command::new(&cargo);
+            command
+                .args([
+                    "tree",
+                    "--offline",
+                    "--locked",
+                    "--prefix",
+                    "none",
+                    "--format",
+                    "{p}",
+                    "--edges",
+                    "normal,build,dev",
+                    "-p",
+                    "demo",
+                    "--target",
+                    platform,
+                ])
+                .current_dir(root);
+            if feature {
+                command.args(["--features", "extra"]);
+            }
+            let tree = super::output(&mut command).unwrap();
+            // Use metadata for the matching target; package identities stay locked.
+            let matching: Value = serde_json::from_str(
+                &super::output(
+                    Command::new(&cargo)
+                        .args([
+                            "metadata",
+                            "--offline",
+                            "--locked",
+                            "--format-version",
+                            "1",
+                            "--filter-platform",
+                            platform,
+                        ])
+                        .current_dir(root),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let scoped = scope_metadata(&matching, &tree).unwrap();
+            let snapshot =
+                dependency_snapshot(&scoped, "demo", &root.join("demo/Cargo.toml"), root).unwrap();
+            assert_eq!(
+                snapshot
+                    .iter()
+                    .map(|p| p["crate"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+        assert!(metadata["resolve"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f == "extra")));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn dependency_paths_resolve_symlink_aliases_and_reject_external_packages() {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        for package in [&source, &source.join("local")] {
+            fs::create_dir_all(package.join("src")).unwrap();
+            fs::write(package.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+        }
+        fs::write(source.join("Cargo.toml"), "[package]\nname='demo'\nversion='1.0.0'\nedition='2021'\n[dependencies]\nlocal={path='local'}\n").unwrap();
+        fs::write(
+            source.join("local/Cargo.toml"),
+            "[package]\nname='local'\nversion='1.0.0'\nedition='2021'\n",
+        )
+        .unwrap();
+        let source = source.canonicalize().unwrap();
+        let alias = directory.path().join("source alias (canonical)");
+        symlink(&source, &alias).unwrap();
+        let metadata = json!({"packages":[
+            {"id":"root","name":"demo","version":"1.0.0","source":null,"manifest_path":source.join("Cargo.toml")},
+            {"id":"local","name":"local","version":"1.0.0","source":null,"manifest_path":source.join("local/Cargo.toml")},
+            {"id":"registry","name":"local","version":"1.0.0","source":"registry+https://github.com/rust-lang/crates.io-index"}],
+            "resolve":{"nodes":[{"id":"root","deps":[{"pkg":"local"}]},{"id":"local","deps":[]}]}});
+        let tree = format!(
+            "demo v1.0.0 ({})\nlocal v1.0.0 ({}) (proc-macro)\n",
+            alias.display(),
+            alias.join("local").display()
+        );
+        let scoped = scope_metadata(&metadata, &tree).unwrap();
+        assert_eq!(scoped["packages"].as_array().unwrap().len(), 2);
+        let snapshot =
+            dependency_snapshot(&scoped, "demo", &alias.join("Cargo.toml"), &alias).unwrap();
+        assert_eq!(snapshot[0]["source"], "path+local");
+        assert_eq!(
+            snapshot,
+            dependency_snapshot(&scoped, "demo", &source.join("Cargo.toml"), &source).unwrap()
+        );
+        let mut args = empty_project_args();
+        args.manifest_path = Some(alias.join("Cargo.toml"));
+        assert_eq!(
+            Project::load(&args).unwrap().manifest,
+            source.join("Cargo.toml")
+        );
+
+        let external = directory.path().join("external");
+        fs::create_dir(&external).unwrap();
+        fs::write(external.join("Cargo.toml"), "").unwrap();
+        symlink(&external, source.join("outside")).unwrap();
+        let mut escaped = scoped;
+        escaped["packages"][1]["manifest_path"] = json!(source.join("outside/Cargo.toml"));
+        let error =
+            dependency_snapshot(&escaped, "demo", &alias.join("Cargo.toml"), &alias).unwrap_err();
+        assert!(format!("{error:#}").contains("Path dependency outside source root"));
+    }
+
+    #[test]
+    fn path_dependency_sources_are_relative_and_stable() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().canonicalize().unwrap();
+        fs::create_dir(source.join("local")).unwrap();
+        fs::write(source.join("Cargo.toml"), "").unwrap();
+        fs::write(source.join("local/Cargo.toml"), "").unwrap();
+        let metadata = json!({"packages":[{"id":"root","name":"demo","manifest_path":source.join("Cargo.toml")},{"id":"local","name":"local","version":"1.0.0","source":null,"manifest_path":source.join("local/Cargo.toml")}],"resolve":{"nodes":[{"id":"root","deps":[{"pkg":"local"}]},{"id":"local","deps":[]}]}});
+        let snapshot =
+            dependency_snapshot(&metadata, "demo", &source.join("Cargo.toml"), &source).unwrap();
+        assert_eq!(snapshot[0]["source"], "path+local");
+    }
+    #[test]
+    fn dependency_snapshot_follows_ids_including_renames_and_multiple_versions() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().canonicalize().unwrap();
+        fs::write(source.join("Cargo.toml"), "").unwrap();
+        let metadata = json!({"packages":[
+            {"id":"root","name":"demo","manifest_path":source.join("Cargo.toml")},
+            {"id":"a1","name":"a","version":"1.0.0","source":"registry+https://github.com/rust-lang/crates.io-index"},
+            {"id":"a2","name":"a","version":"2.0.0","source":"git+https://example.com/a"},
+            {"id":"unused","name":"unused","version":"1","source":null}],
+            "resolve":{"nodes":[{"id":"root","deps":[{"name":"renamed","pkg":"a1"}]},{"id":"a1","deps":[{"pkg":"a2"}]},{"id":"a2","deps":[{"pkg":"a1"}]}]}});
+        let snapshot =
+            dependency_snapshot(&metadata, "demo", &source.join("Cargo.toml"), &source).unwrap();
+        assert_eq!(snapshot.len(), 2);
+        assert_eq!(snapshot[0]["crate"], "a");
+        assert_eq!(snapshot[0]["version"], "1.0.0");
+        assert_eq!(snapshot[1]["source"], "git+https://example.com/a");
     }
     #[test]
     fn maps_only_observed_harnesses() {

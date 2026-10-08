@@ -100,3 +100,94 @@ test("report body removes redundant labels and groups claims by API with revisio
   assert(!d.body.textContent.includes("Shared"));
   dom.window.close();
 });
+
+test("reviewed dependencies keep pinned evidence links, current withdrawal, and author attribution", () => {
+  const { reportBody, reportSummary } = createViews(
+    { user: null },
+    { show_star_karma: false },
+    () => "",
+  );
+  const dom = new JSDOM("<main></main>");
+  const w = dom.window as any;
+  w.render = (c: any) => {
+    w.document.querySelector("main").innerHTML = reportBody(c);
+  };
+  for (const c of [{}, { dependencies: [] }]) {
+    w.render(c);
+    assert.equal(
+      w.document.querySelector("h2").textContent,
+      "Reviewed dependencies (0)",
+    );
+    assert.match(
+      w.document.body.textContent,
+      /No reviewed dependencies declared/,
+    );
+  }
+  w.render({
+    dependencies: [
+      {
+        crate: "dependency<script>",
+        version: "1.2.3",
+        report: 10,
+        revision: 2,
+        withdrawn: false,
+      },
+      {
+        crate: "withdrawn",
+        version: "2.0.0",
+        report: 11,
+        revision: 1,
+        withdrawn: true,
+      },
+      {
+        crate: "private",
+        version: "3.0.0",
+        report: null,
+        revision: null,
+        withdrawn: true,
+      },
+    ],
+  });
+  assert.equal(
+    w.document.querySelector("h2").textContent,
+    "Reviewed dependencies (3)",
+  );
+  assert.equal(w.document.querySelectorAll("li").length, 3);
+  assert.equal(
+    w.document.querySelector("a").getAttribute("href"),
+    "/report/10?v=2",
+  );
+  assert.equal(w.document.querySelector("script"), null);
+  assert.match(w.document.body.textContent, /dependency<script> 1\.2\.3/);
+  assert.match(
+    w.document.body.textContent,
+    /Evidence report currently withdrawn/,
+  );
+  assert.match(w.document.body.textContent, /Evidence unavailable/);
+  assert.match(w.document.body.textContent, /report author declares/);
+  assert.match(
+    w.document.body.textContent,
+    /not independent certification by proofs.rs/,
+  );
+  dom.window.close();
+});
+
+test("crate report summaries show the author-declared reviewed count without a denominator", () => {
+  const { reportSummary } = createViews(
+    { user: null },
+    { show_star_karma: false },
+    () => "",
+  );
+  const dom = new JSDOM(
+    reportSummary(
+      { id: 1, title: "Report", claim_count: 2, dependency_count: 3 },
+      true,
+    ),
+  );
+  assert.match(
+    dom.window.document.body.textContent!,
+    /3 reviewed dependencies declared by the author/,
+  );
+  assert.doesNotMatch(dom.window.document.body.textContent!, /3\s*\//);
+  dom.window.close();
+});

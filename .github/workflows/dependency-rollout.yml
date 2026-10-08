@@ -1,0 +1,55 @@
+name: One-time dependency snapshot rollout
+on:
+  workflow_dispatch:
+  push:
+    branches: [ops/dependency-review-migration]
+permissions:
+  contents: read
+concurrency:
+  group: proofs-rs-production
+  cancel-in-progress: false
+jobs:
+  ci:
+    if: github.repository == 'proofs-rs/proofs-rs' && (github.ref == 'refs/heads/ops/dependency-review-migration' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    uses: ./.github/workflows/cli.yml
+  migrate:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: ${{ steps.resources.outputs.url }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_D1_BACKUP_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_TOKEN }}
+      WRANGLER_SEND_METRICS: "false"
+      PRODUCTION_CUSTOM_DOMAIN: ${{ vars.PRODUCTION_CUSTOM_DOMAIN }}
+      PRODUCTION_EMAIL_ENABLED: ${{ vars.PRODUCTION_EMAIL_ENABLED }}
+      EMAIL_EVENT_SUBSCRIPTION: ${{ vars.PRODUCTION_EMAIL_EVENT_SUBSCRIPTION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: "0.4.45"
+      - run: npm ci
+      - run: npm run build
+      - name: Provision existing production bindings
+        id: resources
+        run: node scripts/provision.mjs production
+        env:
+          GITHUB_CLIENT_ID: ${{ vars.PRODUCTION_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.PRODUCTION_GITHUB_CLIENT_SECRET }}
+          ADMIN_GITHUB_IDS: ${{ vars.ADMIN_GITHUB_IDS }}
+      - name: Maintain, back up, migrate, verify and deploy the reviewed v2 Worker
+        run: node --import tsx scripts/dependency-rollout.mjs migrate wrangler.production.json '${{ steps.resources.outputs.url }}'
+      - name: Read-only production smoke check
+        run: node scripts/smoke.mjs '${{ steps.resources.outputs.url }}' production
+      - name: Rollout summary
+        run: echo 'One-time dependency migration and schema-v2 deployment succeeded. Private backups remain in the private R2 archive. Normal Production deployments now require the completed migration gate.' >> "$GITHUB_STEP_SUMMARY"

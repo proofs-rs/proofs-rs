@@ -74,3 +74,26 @@ Using another tool? See [Tools](/tools) for supported tools and instructions.
 ### Field names and page labels
 
 The pages display `trusted_assumptions` as **What is trusted** and `limitations` as **Technical limitations**. The JSON and CLI configuration keys remain unchanged. Report-level and claim-level fields retain their existing scope; tool limitations are maintained separately. This is a display-name change, not a change to the meaning or contents of existing reports.
+
+### Declare dependency reviews
+
+You may add fixed evidence references to `proofs.toml`:
+
+```toml
+[dependencies]
+serde = { report = 123, revision = 2 }
+```
+
+Use the dependency's actual Cargo package name, including when your manifest uses
+an alias. Its version comes from report 123, revision 2. It must match the same
+crates.io package in the selected run's saved Cargo metadata. Git and path forks
+are not interchangeable with crates.io releases. You can leave other dependencies
+unlisted; if several versions occur, only the referenced report's version counts.
+
+Adding a review or changing its evidence revision needs no new run. A dependency
+change needs a new run, using committed Cargo.lock and the verifier's features and
+target. `publish --dry-run` shows review changes. Omit the entire section to keep
+previous reviews when updating a report; retain an empty `[dependencies]` section
+to remove all reviews. An empty list means zero reviewed dependencies, not zero
+crate dependencies. Missing, hidden, withdrawn, or mismatched evidence blocks
+publication, including with `--force`.

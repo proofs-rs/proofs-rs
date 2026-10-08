@@ -2,7 +2,21 @@ use crate::ProjectArgs;
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+// Cargo may canonicalize aliases such as macOS /var -> /private/var.
+// Compare canonical paths rather than the spelling of existing paths.
+pub(crate) fn same_path(left: &Path, right: &Path) -> bool {
+    left.canonicalize()
+        .ok()
+        .zip(right.canonicalize().ok())
+        .is_some_and(|(left, right)| left == right)
+}
 
 #[derive(Default, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -70,10 +84,18 @@ impl Tool {
 pub struct Git {
     pub remote: Option<String>,
 }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DependencyReview {
+    pub report: std::num::NonZeroU64,
+    pub revision: std::num::NonZeroU64,
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub report: Report,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<BTreeMap<String, DependencyReview>>,
     pub tool: Tool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git: Option<Git>,
@@ -126,7 +148,7 @@ impl Project {
                 requested.as_ref().is_some_and(|path| {
                     p["manifest_path"]
                         .as_str()
-                        .is_some_and(|s| std::path::Path::new(s) == path.as_path())
+                        .is_some_and(|s| same_path(Path::new(s), path))
                 })
             })
             .collect();
@@ -204,7 +226,8 @@ impl Project {
                 target["src_path"]
                     .as_str()
                     .context("Missing library source")?,
-            ),
+            )
+            .canonicalize()?,
             features,
             cfg,
         })
@@ -274,6 +297,7 @@ pub fn init(
             target,
         },
         git: None,
+        dependencies: None,
     };
     config.tool.validate()?;
     use std::io::Write;
@@ -293,6 +317,32 @@ pub fn init(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dependency_reviews_are_optional_strict_and_positive() {
+        let base = "[report]\ntitle='Local'\n[tool]\nname='kani'\nversion='1'\n";
+        assert!(toml::from_str::<Config>(base)
+            .unwrap()
+            .dependencies
+            .is_none());
+        let empty: Config = toml::from_str(&format!("{base}[dependencies]\n")).unwrap();
+        assert!(empty.dependencies.unwrap().is_empty());
+        let config: Config = toml::from_str(&format!(
+            "{base}[dependencies]\nserde={{report=123,revision=2}}\n"
+        ))
+        .unwrap();
+        assert_eq!(config.dependencies.unwrap()["serde"].report.get(), 123);
+        for review in [
+            "{report=0,revision=2}",
+            "{report=123,revision=0}",
+            "{report=123,revision=2,version='1'}",
+            "{report=123,revision=2,rationale='x'}",
+        ] {
+            assert!(
+                toml::from_str::<Config>(&format!("{base}[dependencies]\nserde={review}\n"))
+                    .is_err()
+            );
+        }
+    }
     #[test]
     fn tool_targets_and_properties() {
         let mut tool: Tool = toml::from_str("name='kani'\nversion='0.66.0'").unwrap();

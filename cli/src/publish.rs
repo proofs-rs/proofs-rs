@@ -53,6 +53,7 @@ fn snapshot(report: &Value) -> Result<Value> {
     for key in REPORT_FIELDS {
         value[*key] = text(report, key);
     }
+    value["dependencies"] = Value::Array(report["dependencies"].as_array().into_iter().flatten().map(|dependency| json!({"crate":dependency["crate"],"report":dependency["report"],"revision":dependency["revision"]})).collect());
     value["run_ids"] = report.get("run_ids").cloned().unwrap_or_else(|| json!([]));
     value["claims"] = Value::Array(
         report["claims"]
@@ -112,6 +113,11 @@ fn merge(config: &Config, mut generated: Value, existing: Option<&Value>) -> Res
             body[field] = json!("");
         }
     }
+    if let Some(dependencies) = &config.dependencies {
+        body["dependencies"] = json!(dependencies.iter().map(|(name, review)| json!({"crate":name,"report":review.report,"revision":review.revision})).collect::<Vec<_>>());
+    } else if body.get("dependencies").is_none() {
+        body["dependencies"] = json!([]);
+    }
     let old = existing.map(claims_by_key).transpose()?.unwrap_or_default();
     let mut claims = vec![];
     for claim in generated["claims"]
@@ -140,11 +146,41 @@ fn same_content(a: &Value, b: &Value) -> bool {
         if let Some(claims) = value["claims"].as_array_mut() {
             claims.sort_by_key(|c| (c["api_item_id"].to_string(), c["property"].to_string()));
         }
+        if let Some(dependencies) = value["dependencies"].as_array_mut() {
+            for dependency in dependencies.iter_mut() {
+                *dependency = json!({"crate":dependency["crate"],"report":dependency["report"],"revision":dependency["revision"]});
+            }
+            dependencies.sort_by_key(|d| {
+                (
+                    d["crate"].to_string(),
+                    d["report"].to_string(),
+                    d["revision"].to_string(),
+                )
+            });
+        }
         value
     }
     canonical(a.clone()) == canonical(b.clone())
 }
 fn diff(before: &Value, after: &Value) {
+    let before_dependencies = before["dependencies"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let after_dependencies = after["dependencies"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    for dependency in &before_dependencies {
+        if !after_dependencies.contains(dependency) {
+            eprintln!("  - dependency {dependency}");
+        }
+    }
+    for dependency in &after_dependencies {
+        if !before_dependencies.contains(dependency) {
+            eprintln!("  + dependency {dependency}");
+        }
+    }
     if before["run_ids"] != after["run_ids"] {
         eprintln!("  run_ids: {} -> {}", before["run_ids"], after["run_ids"]);
     }
@@ -175,6 +211,48 @@ fn diff(before: &Value, after: &Value) {
             eprintln!("  - claim {} / {}", k.0, k.1);
         }
     }
+}
+fn validate_dependencies(api: &Api, body: &Value, proof: &Value) -> Result<()> {
+    let reviews = body["dependencies"]
+        .as_array()
+        .context("Missing dependency reviews")?;
+    if reviews.is_empty() {
+        return Ok(());
+    }
+    ensure!(
+        proof["schemaVersion"] == 2,
+        "Dependency reviews require a schema version 2 run; record verification again"
+    );
+    let snapshot = proof["dependencies"]
+        .as_array()
+        .context("Recorded run has no dependency snapshot; record verification again")?;
+    for review in reviews {
+        let name = review["crate"]
+            .as_str()
+            .context("Missing dependency crate")?;
+        let report_id = review["report"]
+            .as_u64()
+            .context("Missing dependency report ID")?;
+        let revision = review["revision"]
+            .as_u64()
+            .context("Missing dependency revision")?;
+        ensure!(
+            report_id > 0 && revision > 0,
+            "Dependency report and revision must be positive"
+        );
+        let current = api.get(&format!("/api/v1/reports/{report_id}"))?;
+        ensure!(
+            current["withdrawn_at"].is_null(),
+            "Dependency report #{report_id} is withdrawn"
+        );
+        let report = api.get(&format!("/api/v1/reports/{report_id}/revisions/{revision}"))?;
+        ensure!(
+            report["crate"] == name,
+            "Dependency {name}: report #{report_id} targets a different crate"
+        );
+        ensure!(snapshot.iter().any(|p| p["crate"] == name && p["version"] == report["version"] && p["source"] == "registry+https://github.com/rust-lang/crates.io-index"), "Dependency {name}: report version {} is not a crates.io dependency in the recorded run", report["version"]);
+    }
+    Ok(())
 }
 fn confirm_removal(removed: &[Value], yes: bool) -> Result<()> {
     if removed.is_empty() {
@@ -394,6 +472,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         }
     }
     let mut body = merge(&config, generated, baseline.as_ref())?;
+    validate_dependencies(&api, &body, &entry["properties"]["proofs"])?;
     if let Some(report) = &remote {
         body["expected_revision"] = report["revision_no"].clone();
     }
@@ -443,6 +522,9 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         diff(&snapshot(report)?, &normalized);
     }
     if options.dry_run {
+        if remote.is_none() {
+            diff(&json!({"dependencies":[],"claims":[]}), &normalized);
+        }
         println!("{}", serde_json::to_string_pretty(&preview)?);
         if conflict {
             eprintln!("A real publication requires --force because the server revision changed.");
@@ -480,6 +562,39 @@ mod tests {
         toml::from_str("[report]\ntitle='Local'\n[tool]\nname='kani'\nversion='0.66.0'\n").unwrap()
     }
     #[test]
+    fn enriched_dependency_details_do_not_change_publication_content() {
+        let plain =
+            json!({"claims":[],"dependencies":[{"crate":"serde","report":123,"revision":2}]});
+        let enriched = json!({"claims":[],"dependencies":[{"crate":"serde","report":123,"revision":2,"version":"1.0.0","withdrawn_at":null}]});
+        assert!(same_content(&plain, &enriched));
+        assert_eq!(
+            snapshot(&enriched).unwrap()["dependencies"],
+            plain["dependencies"]
+        );
+    }
+    #[test]
+    fn dependency_reviews_preserve_clear_and_update_without_new_run() {
+        let old = json!({"run_ids":["run"],"dependencies":[{"crate":"serde","report":123,"revision":2}],"claims":[]});
+        let generated = json!({"run_ids":["run"],"claims":[]});
+        let preserved = merge(&config(), generated.clone(), Some(&old)).unwrap();
+        assert_eq!(preserved["dependencies"], old["dependencies"]);
+        let mut cfg = config();
+        cfg.dependencies = Some(BTreeMap::new());
+        let cleared = merge(&cfg, generated.clone(), Some(&old)).unwrap();
+        assert_eq!(cleared["dependencies"], json!([]));
+        cfg.dependencies.as_mut().unwrap().insert(
+            "serde".into(),
+            crate::config::DependencyReview {
+                report: std::num::NonZeroU64::new(123).unwrap(),
+                revision: std::num::NonZeroU64::new(3).unwrap(),
+            },
+        );
+        let updated = merge(&cfg, generated, Some(&old)).unwrap();
+        assert_eq!(updated["run_ids"], old["run_ids"]);
+        assert_eq!(updated["dependencies"][0]["revision"], 3);
+        assert!(!same_content(&preserved, &updated));
+    }
+    #[test]
     fn preserve_ids_and_web_text_but_update_evidence() {
         let remote = json!({"title":"Web", "explanation":"Web report explanation", "claims":[{"id":"permanent","api_item_id":"api","property":"no_ub","title":"Web title","explanation":"Web claim explanation","precondition":"old","evidence_url":"old"}]});
         let generated = json!({"crate":"demo","version":"1.0.0","tool_version_id":"kani","evidence_url":"shared","claims":[{"api_item_id":"api","property":"no_ub","precondition":"new","evidence_url":"new"}]});
@@ -506,8 +621,15 @@ mod tests {
         let origin = format!("http://{}", server.server_addr());
         let job = std::thread::spawn(move || {
             for attempt in 0..2 {
-                let request = server.recv().unwrap();
+                let mut request = server.recv().unwrap();
                 assert_eq!(request.url(), "/api/v1/reports");
+                let mut payload = String::new();
+                request.as_reader().read_to_string(&mut payload).unwrap();
+                let payload: Value = serde_json::from_str(&payload).unwrap();
+                assert_eq!(
+                    payload["dependencies"],
+                    json!([{"crate":"serde","report":123,"revision":2}])
+                );
                 assert!(request
                     .headers()
                     .iter()
@@ -541,7 +663,7 @@ mod tests {
         let mut state = State {
             pending: Some(Pending {
                 path: "/api/v1/reports".into(),
-                body: json!({"title":"Published"}),
+                body: json!({"title":"Published","dependencies":[{"crate":"serde","report":123,"revision":2}]}),
                 key: "stable-key".into(),
             }),
             ..State::default()

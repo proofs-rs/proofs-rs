@@ -19,3 +19,17 @@ Comments allow public questions, objections, and responses concerning a Report. 
 ## Reproduce
 
 Reproduce provides the information needed to rerun a verification, including the relevant Git commit, invocation, tool version, check results, and logs. Execution records are stored in SARIF format, while verification source code is referenced by a specific commit in an external repository. These records describe the contributor’s execution; they do not imply that proofs.rs has independently reproduced the result. In the future, the service may add automated reproduction or AI-assisted checks.
+
+## Reviewed dependencies
+
+A report can list dependencies whose verification reports its author reviewed.
+Each entry pins one evidence report revision and its crate version. The service
+checks that this package was present in the recorded Cargo dependency resolution;
+it does not independently certify the author's judgment or claim that every
+resolved package was compiled during verification. The list may cover only part
+of a crate's dependencies. A count of zero means no dependency reviews were
+declared.
+
+Evidence does not automatically follow newer report revisions. If an evidence
+report is later withdrawn, the historical entry remains and shows its current
+withdrawal. Hidden evidence is marked unavailable without revealing its content.

@@ -38,7 +38,7 @@ export function createViews(
     return `<article class="claim-item"><a href="/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}${config.show_star_karma ? ` · ${c.star_count} stars` : ""}</div><p class="meta"><a href="/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a>${config.show_star_karma ? ` · ${c.report_star_count} stars` : ""} · <a href="/report/${c.report_id}#discussion">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""}${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
   }
   function reportSummary(c: any, hideCrate = false) {
-    return `<article class="claim-item"><a href="/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""}${config.show_star_karma ? ` · ${c.star_count} stars` : ""} · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
+    return `<article class="claim-item"><a href="/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims · ${c.dependency_count ?? 0} reviewed dependencies declared by the author</div><p class="meta">${user(c.author_id, c.username)}${config.show_star_karma ? ` · ${c.author_karma} karma` : ""}${config.show_star_karma ? ` · ${c.star_count} stars` : ""} · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
   }
   function breadcrumbs(items: Crumb[]) {
     return `<div class="breadcrumbs" role="navigation" aria-label="Breadcrumb">${items.map(({ label, href }) => `<a href="${esc(href)}">${esc(label)}</a>`).join(' <span aria-hidden="true">/</span> ')} <span aria-hidden="true">/</span></div>`;
@@ -123,7 +123,12 @@ export function createViews(
     ${c.evidence_url || c.run_ids?.length || c.environment ? `<section class="report-section report-evidence"><h2>Evidence</h2>${c.evidence_url ? `<p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p>` : ""}${reproduceSection(c.run_ids, c.environment)}</section>` : ""}
     ${c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
     ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
+    ${reportDependencies(c)}
     `;
+  }
+  function reportDependencies(c: any) {
+    const dependencies = c.dependencies ?? [];
+    return `<section class="report-section report-dependencies"><h2>Reviewed dependencies (${dependencies.length})</h2><p class="meta">The report author declares that they reviewed these dependencies using the linked evidence. This is not independent certification by proofs.rs.</p>${dependencies.length ? `<ul>${dependencies.map((dependency: any) => `<li><code>${esc(dependency.crate)} ${esc(dependency.version)}</code> · ${dependency.report != null && dependency.revision != null ? `<a href="/report/${enc(String(dependency.report))}?v=${enc(String(dependency.revision))}">Evidence report #${esc(dependency.report)} · v${esc(dependency.revision)}</a>${dependency.withdrawn ? " · <strong>Evidence report currently withdrawn</strong>" : ""}` : "Evidence unavailable"}</li>`).join("")}</ul>` : "<p>No reviewed dependencies declared.</p>"}</section>`;
   }
   function reportAPIs(c: any) {
     const groups = new Map<string, any[]>();
@@ -194,6 +199,7 @@ export function createViews(
     reportContent,
     reportBody,
     reportAPIs,
+    reportDependencies,
     claimContent,
     toolLimitations,
   };

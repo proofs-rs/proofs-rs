@@ -140,3 +140,61 @@ test("runtime docs are public, use Scalar with matching CSP, and redirect legacy
     assert.equal(existsSync(new URL("../" + path, import.meta.url)), false);
   }
 });
+
+test("dependency wire schemas distinguish evidence inputs, reviews and snapshots", async () => {
+  const spec = await publicSpec();
+  const resolve = (value: any): any =>
+    value.$ref
+      ? resolve(spec.components.schemas[value.$ref.split("/").at(-1)])
+      : value;
+  const input = resolve(
+    spec.paths["/api/v1/reports"].post.requestBody.content["application/json"]
+      .schema,
+  );
+  const reviewInput = resolve(input.properties.dependencies.items);
+  assert.deepEqual(Object.keys(reviewInput.properties).sort(), [
+    "crate",
+    "report",
+    "revision",
+  ]);
+  assert.equal(reviewInput.additionalProperties, false);
+  assert.deepEqual(reviewInput.required.sort(), [
+    "crate",
+    "report",
+    "revision",
+  ]);
+  assert.ok(!input.required.includes("dependencies"));
+  const detail = resolve(
+    spec.paths["/api/v1/reports/{id}"].get.responses[200].content[
+      "application/json"
+    ].schema,
+  );
+  const review = resolve(detail.properties.dependencies.items);
+  assert.deepEqual(Object.keys(review.properties).sort(), [
+    "crate",
+    "report",
+    "revision",
+    "version",
+    "withdrawn",
+  ]);
+  assert.ok(detail.required.includes("dependencies"));
+  const run = resolve(
+    spec.paths["/api/v1/runs/{run}"].get.responses[200].content[
+      "application/json"
+    ].schema,
+  );
+  assert.deepEqual(
+    Object.keys(resolve(run.properties.dependencies.items).properties).sort(),
+    ["crate", "source", "version"],
+  );
+  const sarif = resolve(
+    spec.paths["/api/v1/runs/{run}/sarif"].post.requestBody.content[
+      "application/sarif+json"
+    ].schema,
+  );
+  const proofs = resolve(
+    resolve(sarif.properties.runs.items).properties.properties,
+  ).properties.proofs;
+  assert.equal(resolve(proofs).properties.schemaVersion.const, 2);
+  assert.ok(resolve(proofs).required.includes("dependencies"));
+});

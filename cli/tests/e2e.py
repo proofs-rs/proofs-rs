@@ -69,6 +69,8 @@ class Handler(BaseHTTPRequestHandler):
             assert self.headers.get('Authorization') == 'Bearer fixture-token'
             sarif = json.loads(raw)['runs'][0]
             assert sarif['properties']['proofs']['contracts']
+            assert sarif['properties']['proofs']['schemaVersion'] == 2
+            assert isinstance(sarif['properties']['proofs']['dependencies'], list)
             assert sarif['automationDetails']['guid'] in self.path
             assert sarif['versionControlProvenance'][0]['revisionId']
             assert sarif['artifacts'][sarif['invocations'][0]['stdout']['index']]['contents']['text']

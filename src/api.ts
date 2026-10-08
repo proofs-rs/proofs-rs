@@ -491,32 +491,38 @@ async function reportDetail(c: Ctx, revision?: number) {
     );
   // One read transaction keeps visibility, revision selection and all child rows consistent.
   // Keep the existence result to preserve report_not_found vs revision_not_found.
-  const [visible, reports, claims, runs] = await c.env.DB.batch<any>([
-    stmt(
-      c.env.DB,
-      "SELECT id FROM reports WHERE id=? AND visibility='public'",
-      id,
-    ),
-    stmt(
-      c.env.DB,
-      withStar(publicReport, "report", "p") +
-        ` WHERE p.id=? AND p.visibility='public' AND rr.revision_no=${revisionSQL}`,
-      ...(user ? [user] : []),
-      ...args,
-    ),
-    stmt(
-      c.env.DB,
-      withStar(publicClaim, "claim", "c") +
-        ` WHERE p.id=? AND p.visibility='public' AND r.report_revision=${revisionSQL} ORDER BY r.position`,
-      ...(user ? [user] : []),
-      ...args,
-    ),
-    stmt(
-      c.env.DB,
-      `SELECT run_id FROM report_runs x JOIN reports p ON p.id=x.report_id WHERE p.id=? AND p.visibility='public' AND x.revision_no=${revisionSQL} ORDER BY x.position`,
-      ...args,
-    ),
-  ]);
+  const [visible, reports, claims, runs, dependencies] =
+    await c.env.DB.batch<any>([
+      stmt(
+        c.env.DB,
+        "SELECT id FROM reports WHERE id=? AND visibility='public'",
+        id,
+      ),
+      stmt(
+        c.env.DB,
+        withStar(publicReport, "report", "p") +
+          ` WHERE p.id=? AND p.visibility='public' AND rr.revision_no=${revisionSQL}`,
+        ...(user ? [user] : []),
+        ...args,
+      ),
+      stmt(
+        c.env.DB,
+        withStar(publicClaim, "claim", "c") +
+          ` WHERE p.id=? AND p.visibility='public' AND r.report_revision=${revisionSQL} ORDER BY r.position`,
+        ...(user ? [user] : []),
+        ...args,
+      ),
+      stmt(
+        c.env.DB,
+        `SELECT run_id FROM report_runs x JOIN reports p ON p.id=x.report_id WHERE p.id=? AND p.visibility='public' AND x.revision_no=${revisionSQL} ORDER BY x.position`,
+        ...args,
+      ),
+      stmt(
+        c.env.DB,
+        `SELECT x.crate,x.version,CASE WHEN e.visibility='public' THEN x.evidence_report_id ELSE NULL END report,CASE WHEN e.visibility='public' THEN x.evidence_revision_no ELSE NULL END revision,CASE WHEN e.visibility='public' AND e.withdrawn_at IS NULL THEN 0 ELSE 1 END withdrawn FROM report_dependencies x JOIN reports p ON p.id=x.report_id JOIN reports e ON e.id=x.evidence_report_id WHERE p.id=? AND p.visibility='public' AND x.revision_no=${revisionSQL} ORDER BY x.crate`,
+        ...args,
+      ),
+    ]);
   if (!visible.results.length) throw new Fault(404, "report_not_found");
   const r = reports.results[0];
   if (!r) throw new Fault(404, "revision_not_found");
@@ -524,6 +530,10 @@ async function reportDetail(c: Ctx, revision?: number) {
     ...r,
     my_star: !!r.my_star,
     run_ids: runs.results.map((x) => x.run_id),
+    dependencies: dependencies.results.map((x) => ({
+      ...x,
+      withdrawn: !!x.withdrawn,
+    })),
     claims: claims.results.map((x) => ({ ...x, my_star: !!x.my_star })),
   });
 }
@@ -688,6 +698,57 @@ async function validate(c: Ctx, b: any, existing?: any) {
     removed: previous.filter((x) => !ids.has(x.id)).map((x) => x.id),
   };
   await validateReportRuns(c, b, v);
+  const reviews =
+    b.dependencies === undefined && existing
+      ? await rows(
+          c.env.DB,
+          "SELECT crate,evidence_report_id report,evidence_revision_no revision FROM report_dependencies WHERE report_id=? AND revision_no=(SELECT MAX(revision_no) FROM report_revisions WHERE report_id=?)",
+          existing.id,
+          existing.id,
+        )
+      : (b.dependencies ?? []);
+  if (!Array.isArray(reviews) || reviews.length > 100)
+    throw new Fault(400, "invalid_dependencies");
+  const reviewed = new Set<string>();
+  v.dependencies = [];
+  for (const d of reviews) {
+    const parsed = S.dependencyInput.safeParse(d);
+    if (!parsed.success || reviewed.has(parsed.data.crate))
+      throw new Fault(400, "invalid_dependency_review");
+    const crate = parsed.data.crate,
+      report = positive(parsed.data.report),
+      revision = positive(parsed.data.revision);
+    reviewed.add(crate);
+    const evidence = await one(
+      c.env.DB,
+      "SELECT rel.version,cr.name crate FROM reports p JOIN report_revisions rr ON rr.report_id=p.id JOIN releases rel ON rel.id=p.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE p.id=? AND rr.revision_no=? AND p.visibility='public' AND p.withdrawn_at IS NULL",
+      report,
+      revision,
+    );
+    if (!evidence || evidence.crate !== crate)
+      throw new Fault(400, "dependency_evidence_unavailable");
+    let found = false;
+    for (const run of v.run_ids) {
+      if (
+        await one(
+          c.env.DB,
+          "SELECT 1 FROM run_dependencies WHERE run_id=? AND crate=? AND version=? AND source='registry+https://github.com/rust-lang/crates.io-index'",
+          run,
+          crate,
+          evidence.version,
+        )
+      )
+        found = true;
+    }
+    if (!found) throw new Fault(400, "dependency_not_in_recorded_run");
+    v.dependencies.push({
+      crate,
+      version: evidence.version,
+      report,
+      revision,
+      withdrawn: false,
+    });
+  }
   return v;
 }
 function revisionStatements(
@@ -758,6 +819,40 @@ function revisionStatements(
       ),
     ),
   );
+  for (const d of v.dependencies) {
+    ss.push(
+      guard(
+        db,
+        "EXISTS(SELECT 1 FROM reports p JOIN report_revisions rr ON rr.report_id=p.id JOIN releases rel ON rel.id=p.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE p.id=? AND rr.revision_no=? AND p.visibility='public' AND p.withdrawn_at IS NULL AND cr.name=? AND rel.version=?)",
+        d.report,
+        d.revision,
+        d.crate,
+        d.version,
+      ),
+    );
+    ss.push(
+      guard(
+        db,
+        `EXISTS(SELECT 1 FROM report_runs rr JOIN run_dependencies rd ON rd.run_id=rr.run_id WHERE rr.report_id=${select} AND rr.revision_no=? AND rd.crate=? AND rd.version=? AND rd.source='registry+https://github.com/rust-lang/crates.io-index')`,
+        reportID,
+        n,
+        d.crate,
+        d.version,
+      ),
+    );
+    ss.push(
+      stmt(
+        db,
+        `INSERT INTO report_dependencies VALUES(${select},?,?,?,?,?)`,
+        reportID,
+        n,
+        d.crate,
+        d.version,
+        d.report,
+        d.revision,
+      ),
+    );
+  }
   return ss;
 }
 api.post(

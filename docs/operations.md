@@ -157,11 +157,17 @@ The generator and original sample data are retained in scripts/fixtures.
 
 The schema and application support SARIF-only verification runs. New databases use the current migration baseline.
 
-SARIF is the canonical verification record. One upload request validates and registers the complete document. D1 `verification_runs` contains ownership/search indexes and the SARIF hash, size and R2 location; execution metadata and contracts are not duplicated in D1. R2 stores each attempt under `runs/<author>/<run>/<attempt>.sarif.json`. Limits: 8 MiB including logs, 90 registered runs per author per UTC day. See [the SARIF profile](sarif.md).
+SARIF is the canonical verification record. One upload request validates and registers the complete document. D1 `verification_runs` contains ownership/search indexes and the SARIF hash, size and R2 location; execution metadata and contracts are not duplicated in D1. `run_dependencies` separately indexes saved Cargo dependency resolution for publication validation; `report_dependencies` retains author review declarations by report revision. R2 stores each attempt under `runs/<author>/<run>/<attempt>.sarif.json`. Limits: 8 MiB including logs, 90 registered runs per author per UTC day. See [the SARIF profile](sarif.md).
 
 Failed registrations remove their attempt object after checking for a committed DB row. The daily scheduled sweep also removes unregistered objects older than 24 hours. Valid registered runs remain readable to their owner before publication; public access follows report visibility.
 
 ### Deployment prerequisite
+
+For the dependency-review release, apply `0007_dependency_reviews.sql` and follow
+[the one-time SARIF v2 migration](dependency-migration.md) while writes and object
+cleanup are stopped. Its offline planner produces converted archive objects and
+guarded hash/size/index updates; it does not modify production data itself.
+Historical dependency snapshots and review lists become empty.
 
 Existing installations must be converted in a separate, one-time operator operation before deploying this version. Data-specific transformations and object deletion are not part of the application, schema baseline, or normal deployment workflows. Preserve report/claim identities and verify the converted SARIF and external source reference before deleting obsolete storage. Do not deploy against an unconverted database. Restored databases must also satisfy the current schema before serving traffic.
 
@@ -177,3 +183,16 @@ tool, and exit status and per-contract results are validated from that same docu
 After deploying rustdoc format 60 support, retry a failed import by calling
 `POST /api/v1/publish/prepare` for the same crate/version. Failed jobs do not block
 a new preparation job; no database migration or manual job edit is required.
+
+
+### Dependency-review rollout automation
+
+Normal Production deployment requires the completed SARIF v2 rollout marker and
+no active migration write fences. Execute the dedicated **One-time dependency
+snapshot rollout** workflow first, by creating the same-repository
+`ops/dependency-review-migration` branch at the reviewed PR commit (or dispatching
+on main). This is an explicit operational branch; feature branch pushes do not
+run it. The migration deploys maintenance, drains old invocations, writes private
+D1/R2 backups, atomically migrates/validates evidence, and deploys the reviewed new
+Worker. Failure leaves maintenance rather than reverting to schema-v1 code.
+See [the full workflow and recovery procedure](dependency-migration.md).
