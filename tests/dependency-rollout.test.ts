@@ -15,6 +15,8 @@ import {
   verifyRegisteredRecords,
   migrateArchive,
 } from "../scripts/dependency-rollout.mjs";
+import { repairStagingFixture } from "../scripts/staging-fixture-repair.mjs";
+import { migrateRecord } from "../scripts/migrate-run-dependencies.mjs";
 import { gate, MARKER } from "../scripts/dependency-rollout-gate.mjs";
 const hash = (data: Uint8Array) =>
   createHash("sha256").update(data).digest("hex");
@@ -522,4 +524,116 @@ test("maintenance retry is bounded and never retries apply or unlock", async () 
       safeFailureCode(error) === "maintenance_apply_network_failure",
   );
   assert.equal(calls, 1);
+});
+
+test("historical synthetic fixture repair preserves content and rejects all non-exact matches", async () => {
+  const original = readFileSync(
+    new URL(
+      "../fixtures/migrations/staging-layout-original.sarif.json",
+      import.meta.url,
+    ),
+  );
+  const expected = JSON.parse(original.toString());
+  for (const id of [
+    "c9769922-6967-59a1-93c0-2a1fb7e1e5bf",
+    "5f6678ff-ff2e-5d08-80a9-7848968b9a7e",
+  ]) {
+    const row = {
+      id,
+      r2_key: `staging-layout-v1/${id}.sarif.json`,
+      sha256: hash(original),
+      size: original.length,
+    };
+    assert.throws(() => migrateRecord(original, row), /run ID mismatch/);
+    const repaired = repairStagingFixture(original, row)!;
+    assert.equal(
+      JSON.parse(repaired.bytes.toString()).runs[0].automationDetails.guid,
+      id,
+    );
+    const document = JSON.parse(repaired.bytes.toString());
+    delete document.runs[0].automationDetails;
+    const proofs = document.runs[0].properties.proofs;
+    for (const key of ["schemaVersion", "dependencies", "crate", "version"])
+      delete proofs[key];
+    for (const key of ["precondition", "file", "first_line", "last_line"])
+      delete proofs.contracts[0][key];
+    assert.deepEqual(document, expected); // logs/results/provenance and original contract fields unchanged
+    await verifyRegisteredRecords(
+      [row],
+      async () => original,
+      repairStagingFixture,
+    );
+    assert.equal(
+      repairStagingFixture(repaired.bytes, {
+        ...row,
+        r2_key: repaired.r2_key,
+        sha256: repaired.sha256,
+        size: repaired.size,
+      }),
+      null,
+    );
+    for (const wrong of [
+      { ...row, id: "unknown" },
+      { ...row, r2_key: "runs/private" },
+      { ...row, size: 1 },
+      { ...row, sha256: "wrong" },
+    ])
+      assert.throws(() => repairStagingFixture(original, wrong));
+    assert.throws(
+      () => repairStagingFixture(Buffer.from("modified"), row),
+      /hash\/size mismatch/,
+    );
+  }
+});
+
+test("synthetic fixture repair uses original backups and guarded immutable index migration", async () => {
+  const { db, client, objects } = fixture();
+  const work = await mkdtemp(join(tmpdir(), "staging-fixture-test-"));
+  try {
+    const bytes = readFileSync(
+      new URL(
+        "../fixtures/migrations/staging-layout-original.sarif.json",
+        import.meta.url,
+      ),
+    );
+    const id = "c9769922-6967-59a1-93c0-2a1fb7e1e5bf",
+      key = `staging-layout-v1/${id}.sarif.json`;
+    objects.set(key, bytes);
+    db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?)").run(
+      id,
+      key,
+      hash(bytes),
+      bytes.length,
+    );
+    await client("POST", "lock", {});
+    assert.equal(
+      await migrateArchive(
+        await client("GET", "index"),
+        client,
+        join(work, "archive"),
+        join(work, "converted"),
+        "backups/dependency-review-migration/test",
+        undefined,
+        repairStagingFixture,
+      ),
+      1,
+    );
+    const row: any = db.prepare("SELECT * FROM verification_runs").get();
+    assert.equal(row.id, id);
+    assert.notEqual(row.r2_key, key);
+    assert.deepEqual(objects.get(key), bytes);
+    assert.deepEqual(
+      Buffer.from(
+        objects.get(
+          `backups/dependency-review-migration/test/runs/${id}.sarif.json`,
+        )!,
+      ),
+      bytes,
+    );
+    await verifyRegisteredRecords([row], client);
+    assert.equal(hash(objects.get(row.r2_key)!), row.sha256);
+  } finally {
+    db.close();
+    await rm(work, { recursive: true, force: true });
+  }
 });

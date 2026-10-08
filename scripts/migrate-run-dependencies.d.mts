@@ -12,6 +12,7 @@ export function planMigration(
   rows: RunIndex[],
   inputDirectory: string,
   outputDirectory: string,
+  transform?: typeof migrateRecord,
 ): Promise<
   Array<{
     id: string;

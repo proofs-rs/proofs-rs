@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { planMigration, migrateRecord } from "./migrate-run-dependencies.mjs";
+import { repairStagingFixture } from "./staging-fixture-repair.mjs";
 import { readRecord } from "../src/runs.ts";
 const digest = (b) => createHash("sha256").update(b).digest("hex");
 import { gate, MARKER } from "./dependency-rollout-gate.mjs";
@@ -185,12 +186,16 @@ async function command(args, env = process.env) {
     );
   });
 }
-export async function verifyRegisteredRecords(index, client) {
+export async function verifyRegisteredRecords(
+  index,
+  client,
+  transform = migrateRecord,
+) {
   for (const row of index) {
     const bytes = Buffer.from(
       await client("GET", "object", undefined, row.r2_key),
     );
-    const migrated = migrateRecord(bytes, row);
+    const migrated = transform(bytes, row);
     readRecord(JSON.parse((migrated?.bytes || bytes).toString()));
   }
 }
@@ -201,6 +206,7 @@ export async function migrateArchive(
   output,
   backupPrefix,
   progress = () => {},
+  transform = migrateRecord,
 ) {
   progress("verify_registered_records");
   for (const row of index) {
@@ -208,7 +214,7 @@ export async function migrateArchive(
       await client("GET", "object", undefined, row.r2_key),
     );
     // Verify even records which are already current. The planner checks again.
-    const result = migrateRecord(bytes, row);
+    const result = transform(bytes, row);
     readRecord(JSON.parse((result?.bytes || bytes).toString()));
     const path = resolve(archive, row.r2_key);
     if (!path.startsWith(resolve(archive) + "/"))
@@ -223,7 +229,7 @@ export async function migrateArchive(
     );
   }
   progress("plan_conversion");
-  const manifest = await planMigration(index, archive, output);
+  const manifest = await planMigration(index, archive, output, transform);
   progress("upload_converted_records");
   for (const entry of manifest) {
     const bytes = await readFile(join(output, entry.key));
@@ -329,6 +335,18 @@ async function rollout(configPath, origin, staging = false) {
     throw Error("Expected production deployment config");
   if (!/^https:\/\//.test(origin))
     throw Error("Maintenance origin must use HTTPS");
+  const repairedFixtures = new Set();
+  const transform = staging
+    ? (bytes, row) => {
+        const result = repairStagingFixture(bytes, row);
+        if (
+          result &&
+          !JSON.parse(bytes.toString()).runs?.[0]?.automationDetails?.guid
+        )
+          repairedFixtures.add(row.id);
+        return result;
+      }
+    : migrateRecord;
   const token = randomBytes(32).toString("hex"),
     backupPrefix = `backups/dependency-review-migration/${randomUUID()}`;
   const work = await mkdtemp(join(tmpdir(), "proofs-rollout-"));
@@ -393,7 +411,15 @@ async function rollout(configPath, origin, staging = false) {
     // Read-only integrity preflight exposes deterministic archive failures before
     // the long drain; all records are checked again after backups and draining.
     progress("preflight_registered_records");
-    await verifyRegisteredRecords(await client("GET", "index"), client);
+    await verifyRegisteredRecords(
+      await client("GET", "index"),
+      client,
+      transform,
+    );
+    if (repairedFixtures.size)
+      console.log(
+        `${repairedFixtures.size} known synthetic fixture records normalized in the migration plan; originals remain unchanged.`,
+      );
     progress("drain_previous_invocations");
     // Queue/scheduled old invocations have a 15-minute wall-time ceiling. Give
     // them a full drain window before releasing the write fences. Log no data.
@@ -468,6 +494,7 @@ async function rollout(configPath, origin, staging = false) {
       join(work, "converted"),
       backupPrefix,
       progress,
+      transform,
     );
     progress("release_write_fences");
     await client("POST", "unlock", {});

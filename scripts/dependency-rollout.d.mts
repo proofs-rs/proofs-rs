@@ -14,6 +14,7 @@ export function verifyRegisteredRecords(
     body?: any,
     key?: string,
   ) => Promise<any>,
+  transform?: typeof import("./migrate-run-dependencies.mjs").migrateRecord,
 ): Promise<void>;
 export function safeFailureCode(error: unknown): string;
 export function assertStagingTarget(config: any, origin: string): void;
@@ -31,4 +32,5 @@ export function migrateArchive(
   output: string,
   backupPrefix: string,
   progress?: (phase: string) => void,
+  transform?: typeof import("./migrate-run-dependencies.mjs").migrateRecord,
 ): Promise<number>;

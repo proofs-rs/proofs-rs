@@ -155,3 +155,16 @@ object uploads, lock installation and backup copies retry transient network or
 408/429/502/503/504 failures up to 12 attempts with bounded backoff. This tolerates
 old maintenance-token deployments still serving during propagation. Atomic apply
 and unlock are never retried automatically when their result is uncertain.
+
+
+The staging operator additionally recognizes exactly two historical synthetic
+layout fixtures from commit `40d3a7f` (original SHA-256
+`9ffcb3cc0ebaa92bfe4fb9c96e3ca8f68726b44f77e316c68e9e565170e4f11a`,
+1827 bytes). Those fixtures lacked a run GUID and required record metadata. Exact
+reserved IDs, keys, indexed hash/size and original byte hash must all match before
+normalizing to the explicit synthetic metadata added in PR38. Logs, results,
+provenance and original contract fields remain unchanged; this is still a synthetic
+demo with no verification performed. Original objects and private backups are
+retained, index identities are preserved, and new immutable objects use the same
+guarded atomic migration. Unknown or changed records still fail. This exception
+exists only in the one-time staging operator, never uploads or production rollout.
