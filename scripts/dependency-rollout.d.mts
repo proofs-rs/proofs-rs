@@ -1,3 +1,11 @@
+export function maintenanceRequest(
+  method: string,
+  action: string,
+  url: URL,
+  options: RequestInit,
+  fetcher?: typeof fetch,
+  wait?: (ms: number) => Promise<void>,
+): Promise<Response>;
 export function verifyRegisteredRecords(
   index: any[],
   client: (

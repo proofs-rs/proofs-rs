@@ -11,6 +11,7 @@ import {
   maintenanceConfig,
   assertStagingTarget,
   safeFailureCode,
+  maintenanceRequest,
   verifyRegisteredRecords,
   migrateArchive,
 } from "../scripts/dependency-rollout.mjs";
@@ -412,7 +413,7 @@ test("rollout diagnostics expose only fixed codes, never private error text", ()
   );
   assert.equal(
     safeFailureCode(Error("Maintenance object operation failed (404)")),
-    "maintenance_http_404",
+    "maintenance_object_http_404",
   );
   assert.equal(
     safeFailureCode({ code: "invalid_proofs_sarif" }),
@@ -448,4 +449,77 @@ test("registered archive preflight rejects corruption without writing", async ()
     /hash\/size mismatch/,
   );
   assert.deepEqual(calls, ["GET object", "GET object"]);
+});
+
+test("maintenance safely retries propagation and transient reads and idempotent writes", async () => {
+  for (const [method, action] of [
+    ["GET", "index"],
+    ["GET", "object"],
+    ["PUT", "object"],
+    ["POST", "lock"],
+    ["POST", "copy"],
+  ]) {
+    let calls = 0;
+    const fetcher: typeof fetch = async () =>
+      ++calls === 1
+        ? new Response("Maintenance in progress. Please retry later.", {
+            status: 503,
+          })
+        : Response.json({ ok: true });
+    const response = await maintenanceRequest(
+      method,
+      action,
+      new URL("https://example.invalid"),
+      { method },
+      fetcher,
+      async () => {},
+    );
+    assert.equal(response.status, 200);
+    assert.equal(calls, 2);
+  }
+});
+
+test("maintenance retry is bounded and never retries apply or unlock", async () => {
+  for (const action of ["apply", "unlock", "object"]) {
+    let calls = 0;
+    await assert.rejects(
+      maintenanceRequest(
+        action === "object" ? "GET" : "POST",
+        action,
+        new URL("https://example.invalid"),
+        {},
+        async () => {
+          calls++;
+          return new Response("private body and secret token", { status: 503 });
+        },
+        async () => {},
+      ),
+      (error: any) => {
+        assert.equal(
+          safeFailureCode(error),
+          `maintenance_${action}_http_503_other_response`,
+        );
+        assert.equal(error.message.includes("secret"), false);
+        return true;
+      },
+    );
+    assert.equal(calls, action === "object" ? 12 : 1);
+  }
+  let calls = 0;
+  await assert.rejects(
+    maintenanceRequest(
+      "POST",
+      "apply",
+      new URL("https://example.invalid"),
+      {},
+      async () => {
+        calls++;
+        throw Error("private network details");
+      },
+      async () => {},
+    ),
+    (error: any) =>
+      safeFailureCode(error) === "maintenance_apply_network_failure",
+  );
+  assert.equal(calls, 1);
 });

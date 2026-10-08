@@ -147,3 +147,11 @@ hash just to accept the current object. A permission failure during
 the existing D1 backup-token secret before retrying. No backup check is bypassed.
 Retries conservatively repeat the 16-minute drain; a historical failure without a
 persisted fence timestamp cannot prove that old invocations have finished.
+
+
+Maintenance HTTP failures also identify the fixed action and classify the response
+as maintenance, operation failure, or other, without exposing its body. Reads,
+object uploads, lock installation and backup copies retry transient network or
+408/429/502/503/504 failures up to 12 attempts with bounded backoff. This tolerates
+old maintenance-token deployments still serving during propagation. Atomic apply
+and unlock are never retried automatically when their result is uncertain.

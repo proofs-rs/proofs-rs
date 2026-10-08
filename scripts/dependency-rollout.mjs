@@ -47,9 +47,91 @@ export function safeFailureCode(error) {
     return `wrangler_${wrangler[1]}_failed${wrangler[2] ? "_" + wrangler[2] : ""}`;
   const maintenance =
     /^Maintenance ([a-z-]+) operation failed \((\d{3})\)$/.exec(message);
-  if (maintenance) return `maintenance_http_${maintenance[2]}`;
+  if (
+    /^maintenance_[a-z-]+_(?:http_\d{3}_(?:maintenance_response|operation_failed|other_response)|network_failure)$/.test(
+      error?.rolloutCode || "",
+    )
+  )
+    return error.rolloutCode;
+  if (maintenance)
+    return `maintenance_${maintenance[1]}_http_${maintenance[2]}`;
   if (error instanceof SyntaxError) return "invalid_json";
   return "unclassified_failure";
+}
+const maintenanceActions = new Set([
+  "index",
+  "snapshots",
+  "archive-page",
+  "object",
+  "copy",
+  "lock",
+  "unlock",
+  "apply",
+]);
+export async function maintenanceRequest(
+  method,
+  action,
+  url,
+  options,
+  fetcher = fetch,
+  wait = (ms) => new Promise((done) => setTimeout(done, ms)),
+) {
+  if (!maintenanceActions.has(action))
+    throw Error("Invalid maintenance action");
+  const retryable =
+    method === "GET" ||
+    (method === "PUT" && action === "object") ||
+    (method === "POST" && ["lock", "copy"].includes(action));
+  const attempts = retryable ? 12 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let response;
+    try {
+      response = await fetcher(url, {
+        ...options,
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      if (attempt + 1 < attempts) {
+        await wait(Math.min((attempt + 1) * 1000, 5000));
+        continue;
+      }
+      const error = Error("Maintenance network request failed");
+      error.rolloutCode = `maintenance_${action}_network_failure`;
+      throw error;
+    }
+    if (response.ok) return response;
+    let classification = "other_response";
+    // Read only a bounded prefix, never print response contents or headers.
+    const reader = response.body?.getReader();
+    if (reader) {
+      try {
+        const { value } = await reader.read();
+        const text = new TextDecoder().decode(value?.slice(0, 512)).trim();
+        if (text === "Maintenance in progress. Please retry later.")
+          classification = "maintenance_response";
+        if (text === "Migration operation failed")
+          classification = "operation_failed";
+      } catch {
+      } finally {
+        await reader.cancel().catch(() => {});
+      }
+    }
+    if (
+      [408, 429, 502, 503, 504].includes(response.status) &&
+      attempt + 1 < attempts
+    ) {
+      console.log(
+        `Maintenance retry: action=${action} status=${response.status} response=${classification} attempt=${attempt + 1}`,
+      );
+      await wait(Math.min((attempt + 1) * 1000, 5000));
+      continue;
+    }
+    const error = Error(
+      `Maintenance ${action} operation failed (${response.status})`,
+    );
+    error.rolloutCode = `maintenance_${action}_http_${response.status}_${classification}`;
+    throw error;
+  }
 }
 export function maintenanceConfig(config, token) {
   return {
@@ -257,7 +339,7 @@ async function rollout(configPath, origin, staging = false) {
     const url = new URL(`/__dependency_migration/${action}`, origin);
     if (key) url.searchParams.set("key", key);
     if (cursor) url.searchParams.set("cursor", cursor);
-    const response = await fetch(url, {
+    const response = await maintenanceRequest(method, action, url, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -273,10 +355,6 @@ async function rollout(configPath, origin, staging = false) {
             ? body
             : JSON.stringify(body),
     });
-    if (!response.ok)
-      throw Error(
-        `Maintenance ${action} operation failed (${response.status})`,
-      );
     return method === "GET" && action === "object"
       ? response.arrayBuffer()
       : response.json();
