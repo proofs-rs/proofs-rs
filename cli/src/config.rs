@@ -5,9 +5,18 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
 };
+
+// Cargo may canonicalize aliases such as macOS /var -> /private/var.
+// Compare canonical paths rather than the spelling of existing paths.
+pub(crate) fn same_path(left: &Path, right: &Path) -> bool {
+    left.canonicalize()
+        .ok()
+        .zip(right.canonicalize().ok())
+        .is_some_and(|(left, right)| left == right)
+}
 
 #[derive(Default, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -139,7 +148,7 @@ impl Project {
                 requested.as_ref().is_some_and(|path| {
                     p["manifest_path"]
                         .as_str()
-                        .is_some_and(|s| std::path::Path::new(s) == path.as_path())
+                        .is_some_and(|s| same_path(Path::new(s), path))
                 })
             })
             .collect();
@@ -217,7 +226,8 @@ impl Project {
                 target["src_path"]
                     .as_str()
                     .context("Missing library source")?,
-            ),
+            )
+            .canonicalize()?,
             features,
             cfg,
         })

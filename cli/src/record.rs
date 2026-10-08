@@ -157,7 +157,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         &root,
         source_ref["commit"].as_str().context("Missing commit")?,
     )?;
-    let source = checkout.path.clone();
+    let source = checkout.path.canonicalize()?;
     ensure!(
         source.join(&relative_manifest).exists()
             && source
@@ -228,7 +228,13 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     {
         if package["source"].is_null() {
             ensure!(
-                Path::new(package["manifest_path"].as_str().unwrap_or("")).starts_with(&source),
+                Path::new(
+                    package["manifest_path"]
+                        .as_str()
+                        .context("Missing local package manifest")?
+                )
+                .canonicalize()?
+                .starts_with(&source),
                 "Local dependencies must be contained in the source root"
             );
         }
@@ -404,7 +410,13 @@ fn scope_metadata(metadata: &Value, tree: &str) -> Result<Value> {
                     p["manifest_path"]
                         .as_str()
                         .and_then(|v| Path::new(v).parent())
-                        .is_some_and(|path| line.ends_with(&format!("({})", path.display())))
+                        .is_some_and(|path| {
+                            line.strip_prefix(&format!("{name} v{version} ("))
+                                .and_then(|suffix| suffix.strip_suffix(')'))
+                                .is_some_and(|tree_path| {
+                                    crate::config::same_path(path, Path::new(tree_path))
+                                })
+                        })
                 } else if p["source"] == "registry+https://github.com/rust-lang/crates.io-index" {
                     line == format!("{name} v{version}")
                 } else {
@@ -443,6 +455,10 @@ fn dependency_snapshot(
     manifest: &Path,
     source_root: &Path,
 ) -> Result<Vec<Value>> {
+    let manifest = manifest
+        .canonicalize()
+        .context("Resolve selected package manifest")?;
+    let source_root = source_root.canonicalize().context("Resolve source root")?;
     let packages = metadata["packages"]
         .as_array()
         .context("Missing packages")?;
@@ -452,7 +468,7 @@ fn dependency_snapshot(
             p["name"] == name
                 && p["manifest_path"]
                     .as_str()
-                    .is_some_and(|v| Path::new(v) == manifest)
+                    .is_some_and(|v| crate::config::same_path(Path::new(v), &manifest))
         })
         .context("Missing selected package")?;
     let nodes = metadata["resolve"]["nodes"]
@@ -491,11 +507,13 @@ fn dependency_snapshot(
                     p["manifest_path"]
                         .as_str()
                         .context("Missing dependency manifest")?,
-                );
+                )
+                .canonicalize()
+                .context("Resolve dependency manifest")?;
                 let relative = manifest
                     .parent()
                     .context("Missing dependency directory")?
-                    .strip_prefix(source_root)
+                    .strip_prefix(&source_root)
                     .context("Path dependency outside source root")?;
                 format!("path+{}", path_string(relative))
             };
@@ -1049,33 +1067,87 @@ mod tests {
                 .iter()
                 .any(|f| f == "extra")));
     }
+    #[cfg(unix)]
     #[test]
-    fn path_dependency_sources_are_relative_and_stable() {
-        let metadata = json!({"packages":[{"id":"root","name":"demo","manifest_path":"/source/Cargo.toml"},{"id":"local","name":"local","version":"1.0.0","source":null,"manifest_path":"/source/local/Cargo.toml"}],"resolve":{"nodes":[{"id":"root","deps":[{"pkg":"local"}]},{"id":"local","deps":[]}]}});
-        let snapshot = dependency_snapshot(
-            &metadata,
-            "demo",
-            Path::new("/source/Cargo.toml"),
-            Path::new("/source"),
+    fn dependency_paths_resolve_symlink_aliases_and_reject_external_packages() {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        for package in [&source, &source.join("local")] {
+            fs::create_dir_all(package.join("src")).unwrap();
+            fs::write(package.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+        }
+        fs::write(source.join("Cargo.toml"), "[package]\nname='demo'\nversion='1.0.0'\nedition='2021'\n[dependencies]\nlocal={path='local'}\n").unwrap();
+        fs::write(
+            source.join("local/Cargo.toml"),
+            "[package]\nname='local'\nversion='1.0.0'\nedition='2021'\n",
         )
         .unwrap();
+        let source = source.canonicalize().unwrap();
+        let alias = directory.path().join("source alias (canonical)");
+        symlink(&source, &alias).unwrap();
+        let metadata = json!({"packages":[
+            {"id":"root","name":"demo","version":"1.0.0","source":null,"manifest_path":source.join("Cargo.toml")},
+            {"id":"local","name":"local","version":"1.0.0","source":null,"manifest_path":source.join("local/Cargo.toml")},
+            {"id":"registry","name":"local","version":"1.0.0","source":"registry+https://github.com/rust-lang/crates.io-index"}],
+            "resolve":{"nodes":[{"id":"root","deps":[{"pkg":"local"}]},{"id":"local","deps":[]}]}});
+        let tree = format!(
+            "demo v1.0.0 ({})\nlocal v1.0.0 ({}) (proc-macro)\n",
+            alias.display(),
+            alias.join("local").display()
+        );
+        let scoped = scope_metadata(&metadata, &tree).unwrap();
+        assert_eq!(scoped["packages"].as_array().unwrap().len(), 2);
+        let snapshot =
+            dependency_snapshot(&scoped, "demo", &alias.join("Cargo.toml"), &alias).unwrap();
+        assert_eq!(snapshot[0]["source"], "path+local");
+        assert_eq!(
+            snapshot,
+            dependency_snapshot(&scoped, "demo", &source.join("Cargo.toml"), &source).unwrap()
+        );
+        let mut args = empty_project_args();
+        args.manifest_path = Some(alias.join("Cargo.toml"));
+        assert_eq!(
+            Project::load(&args).unwrap().manifest,
+            source.join("Cargo.toml")
+        );
+
+        let external = directory.path().join("external");
+        fs::create_dir(&external).unwrap();
+        fs::write(external.join("Cargo.toml"), "").unwrap();
+        symlink(&external, source.join("outside")).unwrap();
+        let mut escaped = scoped;
+        escaped["packages"][1]["manifest_path"] = json!(source.join("outside/Cargo.toml"));
+        let error =
+            dependency_snapshot(&escaped, "demo", &alias.join("Cargo.toml"), &alias).unwrap_err();
+        assert!(format!("{error:#}").contains("Path dependency outside source root"));
+    }
+
+    #[test]
+    fn path_dependency_sources_are_relative_and_stable() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().canonicalize().unwrap();
+        fs::create_dir(source.join("local")).unwrap();
+        fs::write(source.join("Cargo.toml"), "").unwrap();
+        fs::write(source.join("local/Cargo.toml"), "").unwrap();
+        let metadata = json!({"packages":[{"id":"root","name":"demo","manifest_path":source.join("Cargo.toml")},{"id":"local","name":"local","version":"1.0.0","source":null,"manifest_path":source.join("local/Cargo.toml")}],"resolve":{"nodes":[{"id":"root","deps":[{"pkg":"local"}]},{"id":"local","deps":[]}]}});
+        let snapshot =
+            dependency_snapshot(&metadata, "demo", &source.join("Cargo.toml"), &source).unwrap();
         assert_eq!(snapshot[0]["source"], "path+local");
     }
     #[test]
     fn dependency_snapshot_follows_ids_including_renames_and_multiple_versions() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().canonicalize().unwrap();
+        fs::write(source.join("Cargo.toml"), "").unwrap();
         let metadata = json!({"packages":[
-            {"id":"root","name":"demo","manifest_path":"/source/Cargo.toml"},
+            {"id":"root","name":"demo","manifest_path":source.join("Cargo.toml")},
             {"id":"a1","name":"a","version":"1.0.0","source":"registry+https://github.com/rust-lang/crates.io-index"},
             {"id":"a2","name":"a","version":"2.0.0","source":"git+https://example.com/a"},
             {"id":"unused","name":"unused","version":"1","source":null}],
             "resolve":{"nodes":[{"id":"root","deps":[{"name":"renamed","pkg":"a1"}]},{"id":"a1","deps":[{"pkg":"a2"}]},{"id":"a2","deps":[{"pkg":"a1"}]}]}});
-        let snapshot = dependency_snapshot(
-            &metadata,
-            "demo",
-            Path::new("/source/Cargo.toml"),
-            Path::new("/source"),
-        )
-        .unwrap();
+        let snapshot =
+            dependency_snapshot(&metadata, "demo", &source.join("Cargo.toml"), &source).unwrap();
         assert_eq!(snapshot.len(), 2);
         assert_eq!(snapshot[0]["crate"], "a");
         assert_eq!(snapshot[0]["version"], "1.0.0");
