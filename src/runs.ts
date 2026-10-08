@@ -13,6 +13,7 @@ import {
   quota,
   text,
   now,
+  rows,
 } from "./core";
 
 export const runs = new Hono<App>();
@@ -86,11 +87,21 @@ export function readRecord(sarif: any) {
     inv = s.invocations[0],
     p = s.properties?.proofs;
   if (
-    p?.schemaVersion !== 1 ||
+    p?.schemaVersion !== 2 ||
     !Array.isArray(s.versionControlProvenance) ||
     s.versionControlProvenance.length !== 1
   )
     throw new Fault(400, "invalid_proofs_sarif");
+  const keys = new Set<string>();
+  for (const dependency of p.dependencies) {
+    const key = JSON.stringify([
+      dependency.crate,
+      dependency.version,
+      dependency.source,
+    ]);
+    if (keys.has(key)) throw new Fault(400, "duplicate_run_dependency");
+    keys.add(key);
+  }
   const provenance = s.versionControlProvenance[0];
   const b = {
     id: id(s.automationDetails?.guid),
@@ -113,6 +124,7 @@ export function readRecord(sarif: any) {
     exit_code: inv.exitCode,
     execution_successful: inv.executionSuccessful,
     contracts: p.contracts,
+    dependencies: p.dependencies,
   };
   if (!Array.isArray(inv.arguments)) throw new Fault(400, "invalid_command");
   if (
@@ -254,6 +266,16 @@ runs.post(
           key,
           now(),
         ),
+        ...record.dependencies.map((d: any) =>
+          stmt(
+            c.env.DB,
+            "INSERT INTO run_dependencies(run_id,crate,version,source) VALUES(?,?,?,?)",
+            run,
+            d.crate,
+            d.version,
+            d.source,
+          ),
+        ),
       ]);
     } catch (error) {
       // A lost DB response may still have committed. Never delete that live object.
@@ -291,6 +313,11 @@ runs.get(
       sha256: r.sha256,
       size: r.size,
       created_at: r.created_at,
+      dependencies: await rows(
+        c.env.DB,
+        "SELECT crate,version,source FROM run_dependencies WHERE run_id=? ORDER BY crate,version,source",
+        r.id,
+      ),
     });
   },
 );

@@ -127,3 +127,32 @@ Staging can also be deployed from a same-repository PR whose head branch starts
 with `staging/`. The existing staging workflow checks out its exact head commit
 and uses the staging environment; other PRs and fork PRs do not deploy. Manual
 workflow dispatch remains available.
+
+### Reviewed dependencies
+
+An optional `proofs.toml` section pins the report revision you reviewed for each
+named dependency:
+
+```toml
+[dependencies]
+serde = { report = 123, revision = 2 }
+```
+
+The evidence report supplies the crate version. Publication checks its crate and
+version against the selected recorded run's Cargo dependency snapshot; only
+crates.io sources are supported for this declaration. A Git or path fork with the
+same name/version does not count as the crates.io package. Other dependencies may
+remain undeclared, and multiple versions may be present: only the evidence
+report's exact version is reviewed.
+
+Reviews belong to the consuming report revision and are the report author's
+judgment, not independent certification by proofs.rs. Evidence revisions stay
+pinned when their report changes; current withdrawal is displayed on old reviews.
+A hidden evidence report exposes no content. Changing reviews alone requires no
+new run; changing dependencies requires a new recorded run. An omitted section
+preserves reviews on update; an explicitly empty `[dependencies]` removes them.
+Zero reviews does not mean the crate has zero dependencies.
+
+Apply `0007_dependency_reviews.sql` and migrate historical stored SARIF before
+deploying. See [the migration procedure](docs/dependency-migration.md). No
+production data is changed by checking out this implementation.

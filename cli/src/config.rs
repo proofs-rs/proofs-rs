@@ -2,7 +2,12 @@ use crate::ProjectArgs;
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::PathBuf,
+    process::Command,
+};
 
 #[derive(Default, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -70,10 +75,18 @@ impl Tool {
 pub struct Git {
     pub remote: Option<String>,
 }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DependencyReview {
+    pub report: std::num::NonZeroU64,
+    pub revision: std::num::NonZeroU64,
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub report: Report,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<BTreeMap<String, DependencyReview>>,
     pub tool: Tool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git: Option<Git>,
@@ -274,6 +287,7 @@ pub fn init(
             target,
         },
         git: None,
+        dependencies: None,
     };
     config.tool.validate()?;
     use std::io::Write;
@@ -293,6 +307,32 @@ pub fn init(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dependency_reviews_are_optional_strict_and_positive() {
+        let base = "[report]\ntitle='Local'\n[tool]\nname='kani'\nversion='1'\n";
+        assert!(toml::from_str::<Config>(base)
+            .unwrap()
+            .dependencies
+            .is_none());
+        let empty: Config = toml::from_str(&format!("{base}[dependencies]\n")).unwrap();
+        assert!(empty.dependencies.unwrap().is_empty());
+        let config: Config = toml::from_str(&format!(
+            "{base}[dependencies]\nserde={{report=123,revision=2}}\n"
+        ))
+        .unwrap();
+        assert_eq!(config.dependencies.unwrap()["serde"].report.get(), 123);
+        for review in [
+            "{report=0,revision=2}",
+            "{report=123,revision=0}",
+            "{report=123,revision=2,version='1'}",
+            "{report=123,revision=2,rationale='x'}",
+        ] {
+            assert!(
+                toml::from_str::<Config>(&format!("{base}[dependencies]\nserde={review}\n"))
+                    .is_err()
+            );
+        }
+    }
     #[test]
     fn tool_targets_and_properties() {
         let mut tool: Tool = toml::from_str("name='kani'\nversion='0.66.0'").unwrap();

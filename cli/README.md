@@ -59,6 +59,21 @@ cargo proofs publish --server https://proofs-rs-staging.proofs-rs.workers.dev --
 
 You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens are stored in a per-server file in the OS user config directory (`cargo-proofs`), with mode 0600 on Unix. Set `PROOFS_CONFIG_DIR` to override that credentials directory. Tokens are never saved in the repository. `logout` revokes the token before removing it. HTTP is allowed only for loopback development servers; redirects are not followed.
 
+## Dependency reviews
+
+Attach a specific report revision for a dependency in `proofs.toml`:
+
+```toml
+[dependencies]
+serde = { report = 123, revision = 2 }
+```
+
+Report and revision IDs must be positive integers. Entries accept only `report` and `revision`; crate versions come from the recorded run. Names use the actual package name even when Cargo renames the dependency. Each selected report must target a crate/version present in the recorded crates.io dependency snapshot and remain active. Multiple resolved versions of a crate are supported.
+
+New runs record `properties.proofs.schemaVersion = 2` and a required dependency snapshot containing each reachable resolved package's crate, version, and Cargo source. The snapshot retains identities from `cargo metadata --locked` in the detached verification worktree. `cargo tree --locked` scopes the graph to the selected package with the verifier's features and compilation target, so sibling workspace features cannot add dependencies to the snapshot. Workspace dependencies, transitive dependencies and distinct versions retain their resolved identities. Publishing uses this snapshot rather than the current checkout's lockfile.
+
+Omitting `[dependencies]` preserves the existing report's reviews when revising. An explicit empty `[dependencies]` clears them. Editing reviews reuses the selected recorded run; selecting another run revalidates reviews against that run. Publishing requires a version 2 recording; record verification again to migrate older runs. `publish --dry-run` displays review additions and removals and checks referenced report revisions; the service performs final authoritative validation. Interrupted publication resumes the exact saved review references.
+
 ## Discovery
 
 - Supports library free functions and concrete methods, including trait implementation methods identified as `<Type as Trait>::method`, nested/ordinary external modules, explicit `use` aliases and public reexports, `#[kani::...]` and `#[cfg_attr(kani, kani::...)]`.

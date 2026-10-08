@@ -25,7 +25,12 @@ The only proofs.rs extension is `runs[0].properties.proofs`:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "dependencies": [{
+    "crate": "serde",
+    "version": "1.0.228",
+    "source": "registry+https://github.com/rust-lang/crates.io-index"
+  }],
   "crate": "example",
   "version": "1.0.0",
   "contracts": [{
@@ -44,14 +49,27 @@ The only proofs.rs extension is `runs[0].properties.proofs`:
 }
 ```
 
-`schemaVersion`, `crate`, `version`, and `contracts` are required. `target` records
+`schemaVersion`, `crate`, `version`, `contracts`, and `dependencies` are required.
+The snapshot contains the selected package's reachable resolved Cargo packages,
+with exact versions and source identities, captured using `cargo metadata --locked`
+in the run worktree with the invocation's Cargo feature and target flags.
+`cargo tree --locked --package <selected-package>` with the same flags limits this
+snapshot to that package, avoiding features enabled only by sibling workspace
+members. Package versions and source identities remain those from locked metadata.
+Ambiguous source identities or unsupported package-selection options stop recording. It is
+resolution evidence, not a statement that all these packages were compiled.
+Path packages retain a stable `path+<relative-package-directory>` source identity and Git/alternative registry packages
+retain their Cargo source; they cannot satisfy a crates.io review by name/version
+alone. The selected package itself is excluded. `[]` is a valid empty snapshot.
+ `target` records
 adapter configuration when applicable. Platform/compiler/recorder values are
 optional context. Every published contract must have observed successful results.
 The service resolves the registered tool version from the SARIF driver; a client
 cannot supply an inconsistent tool ID or independent execution metadata.
 
 D1 retains only the run UUID, author, crate/version and tool-version search indexes,
-SHA-256, byte size, R2 key and creation time. Execution details and contracts are
+SHA-256, byte size, R2 key and creation time, plus normalized dependency rows
+for publication checks. Execution details and contracts are
 read from SARIF when needed. `GET /runs/{uuid}` returns the storage/index summary;
 `GET /runs/{uuid}/sarif` returns the canonical document. Source file contents are
 not embedded; only referenced output stream artifacts may contain text.
@@ -60,3 +78,7 @@ R2 and D1 cannot commit atomically. Each upload attempt uses a unique object key
 If registration fails, its object is removed after checking that D1 did not commit.
 A scheduled sweep reclaims unregistered objects older than 24 hours, including
 crash leftovers. Valid registered runs are preserved even before report publication.
+
+Historical schema-v1 objects must be migrated once to schema v2 with empty
+snapshots and new hash/size indexes before deployment. New v1 uploads are rejected.
+See [the migration procedure](dependency-migration.md).

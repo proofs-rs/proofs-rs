@@ -3,6 +3,9 @@
   "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
   "runs": [
     {
+      "automationDetails": {
+        "guid": "5f6678ff-ff2e-5d08-80a9-7848968b9a7e"
+      },
       "tool": {
         "driver": {
           "name": "Layout demo",
@@ -38,11 +41,19 @@
       ],
       "properties": {
         "proofs": {
+          "schemaVersion": 2,
+          "dependencies": [],
+          "crate": "report-layout-demo",
+          "version": "1.0.0-demo.1",
           "platform": "Synthetic platform",
           "rustc": "Synthetic compiler",
           "contracts": [
             {
               "harness": "demo",
+              "precondition": "Demo input only",
+              "file": "src/lib.rs",
+              "first_line": 1,
+              "last_line": 1,
               "api_paths": [
                 "report_layout_demo::decode"
               ],

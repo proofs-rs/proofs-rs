@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { app } from "../src/worker";
 import { hash, Env } from "../src/core";
 import { extractAPIs, importJob, refreshCatalog } from "../src/imports";
-import { cleanupRunUploads } from "../src/runs";
+import { cleanupRunUploads, readRecord } from "../src/runs";
 function recordedSarif(id: string, command = ["cargo", "kani"]) {
   return {
     version: "2.1.0",
@@ -46,7 +46,8 @@ function recordedSarif(id: string, command = ["cargo", "kani"]) {
         ],
         properties: {
           proofs: {
-            schemaVersion: 1,
+            schemaVersion: 2,
+            dependencies: [],
             crate: "sample",
             version: "1.0.0",
             contracts: [
@@ -3259,4 +3260,237 @@ test("UI visibility configuration defaults off and exposes independent flags wit
       assert.equal(body.show_star_karma, star);
       assert.equal(body.show_home_discussion, discussion);
     }
+});
+
+test("dependency reviews pin public evidence to the selected registry snapshot", async () => {
+  const { db, request } = await fixture();
+  const evidence = await request("/reports", "POST", reportInput);
+  assert.equal(evidence.status, 201);
+  const dependencies = [
+    { crate: "sample", report: evidence.body.id, revision: 1 },
+  ];
+  assert.equal(
+    (
+      await request("/reports/validate", "POST", {
+        ...reportInput,
+        dependencies,
+      })
+    ).status,
+    400,
+  );
+  db.prepare("INSERT INTO run_dependencies VALUES(?,?,?,?)").run(
+    reportInput.run_ids[0],
+    "sample",
+    "1.0.0",
+    "git+https://example.test/source",
+  );
+  assert.equal(
+    (
+      await request("/reports/validate", "POST", {
+        ...reportInput,
+        dependencies,
+      })
+    ).status,
+    400,
+  );
+  db.prepare("INSERT INTO run_dependencies VALUES(?,?,?,?)").run(
+    reportInput.run_ids[0],
+    "sample",
+    "1.0.0",
+    "registry+https://github.com/rust-lang/crates.io-index",
+  );
+  const made = await request("/reports", "POST", {
+    ...reportInput,
+    dependencies,
+  });
+  assert.equal(made.status, 201);
+  const detail = await request("/reports/" + made.body.id);
+  assert.deepEqual(detail.body.dependencies, [
+    { ...dependencies[0], version: "1.0.0", withdrawn: false },
+  ]);
+  assert.equal(detail.body.dependency_count, 1);
+  assert.equal(
+    (
+      await request("/reports/validate", "POST", {
+        ...reportInput,
+        dependencies: [...dependencies, ...dependencies],
+      })
+    ).status,
+    400,
+  );
+  const revised = await request(`/reports/${made.body.id}/revisions`, "POST", {
+    ...reportInput,
+    expected_revision: 1,
+  });
+  assert.equal(revised.status, 201);
+  assert.equal(
+    (await request(`/reports/${made.body.id}`)).body.dependencies.length,
+    1,
+  );
+  db.prepare("UPDATE reports SET withdrawn_at=? WHERE id=?").run(
+    new Date().toISOString(),
+    evidence.body.id,
+  );
+  assert.deepEqual(
+    (await request(`/reports/${made.body.id}`)).body.dependencies,
+    [{ ...dependencies[0], version: "1.0.0", withdrawn: true }],
+  );
+  assert.equal(
+    (
+      await request(`/reports/${made.body.id}/revisions`, "POST", {
+        ...reportInput,
+        expected_revision: 2,
+      })
+    ).status,
+    400,
+  );
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
+    evidence.body.id,
+  );
+  assert.deepEqual(
+    (await request(`/reports/${made.body.id}`)).body.dependencies,
+    [
+      {
+        crate: "sample",
+        version: "1.0.0",
+        report: null,
+        revision: null,
+        withdrawn: true,
+      },
+    ],
+  );
+  assert.equal(
+    (
+      await request(`/reports/${made.body.id}/revisions`, "POST", {
+        ...reportInput,
+        expected_revision: 2,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(`/reports/${made.body.id}/revisions`, "POST", {
+        ...reportInput,
+        expected_revision: 2,
+        dependencies: [],
+      })
+    ).status,
+    201,
+  );
+  assert.deepEqual(
+    (await request(`/reports/${made.body.id}`)).body.dependencies,
+    [],
+  );
+});
+
+test("SARIF v2 requires an explicit dependency snapshot and rejects legacy records", () => {
+  const sarif = recordedSarif(reportInput.run_ids[0]);
+  const proofs = sarif.runs[0].properties.proofs as any;
+  const dependency = {
+    crate: "dep",
+    version: "2.3.4",
+    source: "registry+https://github.com/rust-lang/crates.io-index",
+  };
+  proofs.dependencies = [dependency];
+  assert.deepEqual(readRecord(sarif).dependencies, [dependency]);
+  proofs.dependencies = [dependency, dependency];
+  assert.throws(() => readRecord(sarif));
+  delete proofs.dependencies;
+  assert.throws(() => readRecord(sarif));
+  proofs.dependencies = [];
+  proofs.schemaVersion = 1;
+  assert.throws(() => readRecord(sarif));
+});
+
+test("dependency evidence failures and races never create partial reports", async () => {
+  const { db, env, request } = await fixture();
+  const evidence = await request("/reports", "POST", reportInput);
+  const dep = { crate: "sample", report: evidence.body.id, revision: 1 };
+  db.prepare("INSERT INTO run_dependencies VALUES(?,?,?,?)").run(
+    reportInput.run_ids[0],
+    "sample",
+    "2.0.0",
+    "registry+https://github.com/rust-lang/crates.io-index",
+  );
+  const publish = (dependency: any) =>
+    request("/reports", "POST", { ...reportInput, dependencies: [dependency] });
+  assert.equal((await publish(dep)).status, 400);
+  db.prepare("INSERT INTO run_dependencies VALUES(?,?,?,?)").run(
+    reportInput.run_ids[0],
+    "sample",
+    "1.0.0",
+    "registry+https://github.com/rust-lang/crates.io-index",
+  );
+  for (const invalid of [
+    { ...dep, report: 99999 },
+    { ...dep, revision: 99999 },
+    { ...dep, crate: "missing" },
+    { ...dep, version: "2.0.0" },
+    { ...dep, rationale: "wrong field" },
+  ]) {
+    assert.equal((await publish(invalid)).status, 400);
+  }
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
+    evidence.body.id,
+  );
+  assert.equal((await publish(dep)).status, 400);
+  db.prepare("UPDATE reports SET visibility='public' WHERE id=?").run(
+    evidence.body.id,
+  );
+  const savedBatch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async (statements: any) => {
+    db.prepare("UPDATE reports SET withdrawn_at=? WHERE id=?").run(
+      new Date().toISOString(),
+      evidence.body.id,
+    );
+    return savedBatch(statements);
+  };
+  assert.equal((await publish(dep)).status, 409);
+  env.DB.batch = savedBatch;
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) n FROM reports").get() as any).n,
+    1,
+  );
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) n FROM report_dependencies").get() as any).n,
+    0,
+  );
+  db.prepare("UPDATE reports SET withdrawn_at=NULL WHERE id=?").run(
+    evidence.body.id,
+  );
+  const made = await publish(dep);
+  assert.equal(made.status, 201);
+  assert.equal(
+    (await request(`/reports/${made.body.id}`)).body.dependencies[0].version,
+    "1.0.0",
+  );
+  assert.throws(() =>
+    db.prepare("UPDATE report_dependencies SET version='2.0.0'").run(),
+  );
+  assert.throws(() => db.prepare("DELETE FROM report_dependencies").run());
+  assert.throws(() =>
+    db.prepare("UPDATE run_dependencies SET version='9.0.0'").run(),
+  );
+  assert.throws(() => db.prepare("DELETE FROM run_dependencies").run());
+  const run = "22222222-2222-4222-8222-222222222222";
+  db.prepare(
+    "INSERT INTO verification_runs SELECT ?,author_id,crate,version,tool_version_id,sha256,size,?,created_at FROM verification_runs WHERE id=?",
+  ).run(run, "second-run-key", reportInput.run_ids[0]);
+  (env.ARCHIVE as any).get = async () => ({
+    json: async () => recordedSarif(run),
+  });
+  const revise = (extra: any) =>
+    request(`/reports/${made.body.id}/revisions`, "POST", {
+      ...reportInput,
+      run_ids: [run],
+      expected_revision: 1,
+      ...extra,
+    });
+  assert.equal((await revise({})).status, 400);
+  assert.equal((await revise({ dependencies: [] })).status, 201);
+  assert.deepEqual(
+    (await request(`/reports/${made.body.id}`)).body.dependencies,
+    [],
+  );
 });

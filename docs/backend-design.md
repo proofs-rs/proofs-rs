@@ -308,3 +308,32 @@ required `reason`. Each successful edit records an audit event and update time.
 Tool registration/retirement does not overwrite limitations. Correction requests
 use the repository's existing GitHub Issues channel. Administrative operations
 remain excluded from the public OpenAPI contract.
+
+## Dependency snapshots and review declarations
+
+`run_dependencies` indexes immutable run-time Cargo resolution snapshots. SARIF
+`proofs.schemaVersion=2` requires `dependencies`, including an empty array.
+`report_dependencies` separately stores the author's review declaration per report
+revision, with composite foreign keys to both the consuming and evidence revisions
+and one review per dependency crate name. Published dependency versions come from
+the evidence report, never from an input version or the current working tree.
+
+Creation/revision requests accept `dependencies: [{crate, report, revision}]`.
+An omitted field on revision preserves the previous declaration; `[]` clears it.
+Preserved declarations are checked again if runs change. The server requires the
+fixed evidence revision to exist and its report to be public and not withdrawn,
+and requires the same crate/version with a crates.io registry source in the
+selected saved run. Database-dependent checks also guard the publication
+transaction. An omitted dependency is allowed, and an empty declaration means
+zero reviewed dependencies rather than zero resolved packages.
+
+Report detail and fixed-revision reads return
+`dependencies: [{crate, version, report, revision, withdrawn}]`; evidence hidden
+after publication is rendered unavailable without leaking report content.
+Withdrawal remains visible without modifying the historical declaration.
+Report summaries return the review count. These are declarations by the consuming
+report's author, not separate reviews conducted by the service.
+
+Existing runs are converted once to schema v2 with empty snapshots; existing
+report revisions have no reviews. There is no permanent legacy/unrecorded
+validation path. See [the migration procedure](dependency-migration.md).

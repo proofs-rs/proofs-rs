@@ -162,6 +162,7 @@ export const report = z
     star_count: integer,
     author_karma: integer,
     claim_count: integer,
+    dependency_count: integer,
   })
   .meta({ id: "Report" });
 export const claim = z
@@ -217,7 +218,25 @@ export const claim = z
     in_current_report: flag,
   })
   .meta({ id: "Claim" });
+export const dependencyInput = z.strictObject({
+  crate: required(100),
+  report: positiveInput,
+  revision: positiveInput,
+});
+export const dependency = z.object({
+  crate: string,
+  version: string,
+  report: integer.nullable(),
+  revision: integer.nullable(),
+  withdrawn: z.boolean(),
+});
+export const runDependency = z.object({
+  crate: required(100),
+  version: required(100),
+  source: required(1000),
+});
 export const reportDetail = report.extend({
+  dependencies: z.array(dependency),
   my_star: z.boolean(),
   run_ids: z.array(string),
   claims: z.array(claim.extend({ my_star: z.boolean() })),
@@ -283,6 +302,7 @@ export const reportInput = z
       .min(1)
       .max(100),
     run_ids: z.array(string).min(1).max(10),
+    dependencies: z.array(dependencyInput).max(100).optional(),
   })
   .meta({ id: "ReportInput" });
 export const validatedClaim = z.object({
@@ -309,6 +329,7 @@ export const validatedReport = z.object({
   tool_version: string,
   claims: z.array(validatedClaim),
   run_ids: z.array(string),
+  dependencies: z.array(dependency),
   changes: z.object({
     added: integer,
     retained: z.array(string),
@@ -332,6 +353,7 @@ export const run = z
     sha256: string,
     size: integer,
     created_at: string,
+    dependencies: z.array(runDependency),
   })
   .meta({ id: "VerificationRun" });
 export const uploadedRun = z.object({ id: string, sha256: string });
@@ -414,7 +436,8 @@ export const sarif = z
             .max(50000),
           properties: z.looseObject({
             proofs: z.looseObject({
-              schemaVersion: z.literal(1),
+              schemaVersion: z.literal(2),
+              dependencies: z.array(runDependency).max(10000),
               crate: required(100),
               version: required(100),
               contracts: z
