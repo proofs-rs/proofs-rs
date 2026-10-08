@@ -3083,3 +3083,54 @@ test("signup and CLI approval complete through HTML forms and return session coo
   );
   dom.window.close();
 });
+
+test("optional staging pagination fixture is repeatable and provides two HTML pages", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env } = await fixture();
+  for (const name of [
+    "staging-demo",
+    "staging-pagination",
+    "staging-pagination",
+  ]) {
+    db.exec(
+      readFileSync(new URL(`../fixtures/${name}.sql`, import.meta.url), "utf8"),
+    );
+  }
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) n FROM reports WHERE create_key LIKE 'staging-pagination-v1-%'",
+      )
+      .get()!.n,
+    36,
+  );
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  const first = new JSDOM(
+    await (
+      await app.request(
+        "https://example.test/crate/pagination-demo?version=1.0.0-demo.1",
+        {},
+        env,
+      )
+    ).text(),
+  );
+  const next = first.window.document
+    .querySelector('a[rel="next"]')!
+    .getAttribute("href")!;
+  assert.ok(next);
+  const second = new JSDOM(
+    await (
+      await app.request(new URL(next, "https://example.test").href, {}, env)
+    ).text(),
+  );
+  const ids = (dom: any) =>
+    [
+      ...dom.window.document.querySelectorAll(
+        'main .claim-item a[href^="/report/"]',
+      ),
+    ].map((a: any) => a.getAttribute("href"));
+  assert.equal(ids(first).length, 30);
+  assert.equal(ids(second).length, 6);
+  assert.equal(new Set([...ids(first), ...ids(second)]).size, 36);
+  assert.equal(second.window.document.querySelector('a[rel="next"]'), null);
+});

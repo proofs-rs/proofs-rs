@@ -94,3 +94,50 @@ if (
 console.log(
   "Report layout cases added (report-layout-demo). Staging demo ready: 7 crates, 9 reports, 16 claims, nested comments and independent stars.",
 );
+
+async function readPage(path) {
+  const response = await fetch(new URL(path, origin));
+  if (!response.ok)
+    throw Error(`Pagination page failed: ${path} (${response.status})`);
+  return response.text();
+}
+const reportsBefore = await readPage("/reports");
+console.log(
+  `Existing report pagination: ${reportsBefore.includes('rel="next"')}`,
+);
+if (!reportsBefore.includes('rel="next"')) {
+  const paginationSQL = await readFile(
+    "fixtures/staging-pagination.sql",
+    "utf8",
+  );
+  const lines = paginationSQL.split("\n").filter(Boolean);
+  if (lines.some((line) => !line.startsWith("INSERT OR IGNORE INTO ")))
+    throw Error("Pagination seed must be additive");
+  for (let i = 0; i < lines.length; i += 100) {
+    const result = await api(`/d1/database/${db.uuid}/query`, {
+      sql: lines.slice(i, i + 100).join("\n"),
+    });
+    if (result.some((r) => !r.success)) throw Error("Pagination seed failed");
+  }
+  const check = await api(`/d1/database/${db.uuid}/query`, {
+    sql: "SELECT COUNT(*) AS n FROM reports WHERE create_key LIKE 'staging-pagination-v1-%'; PRAGMA foreign_key_check;",
+  });
+  if (check[0].results[0].n !== 36 || check[1].results.length)
+    throw Error("Pagination fixture verification failed");
+  console.log("Added 36 synthetic pagination reports and claims.");
+}
+for (const path of [
+  "/reports",
+  "/crate/pagination-demo?version=1.0.0-demo.1",
+]) {
+  if (path.includes("pagination-demo") && reportsBefore.includes('rel="next"'))
+    continue;
+  const first = await readPage(path);
+  const next = first.match(/<a rel="next" href="([^"]+)"/);
+  if (!next) throw Error(`Pagination missing: ${path}`);
+  const nextPath = next[1].replaceAll("&amp;", "&");
+  const second = await readPage(nextPath);
+  if (!second.includes('class="claim-item"'))
+    throw Error(`Empty next page: ${nextPath}`);
+  console.log(`Pagination verified: ${origin}${path} -> ${origin}${nextPath}`);
+}

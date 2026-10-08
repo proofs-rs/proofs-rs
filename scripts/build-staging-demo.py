@@ -96,3 +96,21 @@ for mode in ['full','minimal','environment-only','withdrawn']:
 Path('fixtures/layout-runs.json').write_text(json.dumps(['staging-layout-v1/'+uid('layout/run/'+str(n))+'.sarif.json' for n in range(2)],indent=2)+'\n')
 Path('fixtures/staging-demo.sql').write_text('\n'.join(Q)+'\n')
 print(f'{len(groups)} reports; {len(claims)} claims; {len(Q)} additive statements')
+
+# Separate, optional fixture for exercising growing lists on staging.
+Q=[]
+c={'name':'pagination-demo','v':'1.0.0'}
+insert('crates',name=c['name'],description='Synthetic pagination fixture. No verification was performed.')
+insert('releases',crate_id=expr("(SELECT id FROM crates WHERE name='pagination-demo')"),version='1.0.0-demo.1',created_at=date(0))
+aid=uid('pagination/api')
+insert('api_items',id=aid,release_id=rel(c),canonical_key='pagination:decode',display_path='pagination_demo::decode',kind='function',is_unsafe=0,signature='pub fn decode(/* synthetic */)',upstream_url='https://example.com/pagination-demo')
+insert('api_item_metadata',api_item_id=aid,category='function',method_name='decode',is_blanket=0)
+for n in range(36):
+    key='staging-pagination-v1-'+str(n)
+    reportid=expr('(SELECT id FROM reports WHERE create_key='+val(key)+')')
+    claimid=uid('pagination/claim/'+str(n))
+    insert('reports',create_key=key,release_id=rel(c),author_id=uid('mira'),created_at=date(0),updated_at=date(0))
+    insert('report_revisions',report_id=reportid,revision_no=1,title='Pagination demo '+str(n+1).zfill(2),explanation='Synthetic pagination fixture. No verification was performed.',trusted_assumptions='',environment='Synthetic fixture',evidence_url='https://example.com/pagination-demo',limitations='Not a real proof.',tool_version_id=uid('layout/tool'),created_at=date(0))
+    insert('claims',id=claimid,report_id=reportid,api_item_id=aid,property='panic_contract',created_at=date(0))
+    insert('claim_revisions',claim_id=claimid,report_id=reportid,report_revision=1,position=0,title='Synthetic pagination claim '+str(n+1),precondition='Synthetic input only',explanation='Pagination demonstration only.',trusted_assumptions='',evidence_url='https://example.com/pagination-demo',limitations='Not a real proof.')
+Path('fixtures/staging-pagination.sql').write_text('\n'.join(Q)+'\n')
