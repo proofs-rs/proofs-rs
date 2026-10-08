@@ -2960,9 +2960,8 @@ test("HTML includes all crate versions, API items, report claims, tool versions 
     );
   const crate = await read("/crate/sample?version=1.0.0");
   assert.equal(
-    crate.window.document.querySelectorAll(
-      'details a[href^="/crate/sample?version="]',
-    ).length,
+    crate.window.document.querySelectorAll('select[name="version"] option')
+      .length,
     37,
   );
   assert.equal(
@@ -2984,8 +2983,9 @@ test("HTML includes all crate versions, API items, report claims, tool versions 
   );
   const settings = await read("/settings");
   assert.equal(
-    settings.window.document.querySelectorAll('form[action="/_actions/revoke"]')
-      .length,
+    settings.window.document.querySelectorAll(
+      'form[action="/settings"] input[name="revoke"]',
+    ).length,
     36,
   );
   for (const dom of [crate, report, tool, settings]) dom.window.close();
@@ -3157,4 +3157,122 @@ test("My activity always shows report and comment sections without section navig
     assert.equal(document.querySelector('nav[aria-label="Activity"]'), null);
     assert.equal(document.querySelector('main a[href*="section="]'), null);
   }
+});
+
+test("SSR retains the original controls, comment editor placement and inline logs", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { env, request, db } = await fixture();
+  env.SHOW_STAR_KARMA = "false";
+  await request("/reports", "POST", reportInput);
+  const comment = await request("/reports/1/comments", "POST", {
+    body: "Original comment",
+    revision_no: 1,
+  });
+  const id = comment.body.id;
+  const read = async (path: string, signedIn = true) => {
+    const response = await app.request(
+      env.APP_ORIGIN + path,
+      signedIn ? { headers: { Cookie: "__Host-proofsr_session=alice" } } : {},
+      env,
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+    return new JSDOM(await response.text()).window.document;
+  };
+  const crate = await read("/crate/sample?version=1.0.0");
+  assert.equal(
+    crate.querySelector('select[name="version"]')?.querySelectorAll("option")
+      .length,
+    1,
+  );
+  assert.equal(crate.querySelector("#reports")?.textContent, "Reports (1)");
+  assert.equal(
+    crate
+      .querySelector('a[href^="https://crates.io/"]')
+      ?.getAttribute("target"),
+    "_blank",
+  );
+  const crates = await read("/crates");
+  assert.equal(crates.querySelectorAll("td.numeric").length, 3);
+  assert.match(
+    crates.querySelector("time")!.textContent!,
+    /^\d{4}-\d{2}-\d{2}$/,
+  );
+  assert.ok(crates.querySelector("th[title]"));
+  const report = await read("/report/1");
+  assert.equal(report.querySelectorAll(".vote button").length, 2);
+  assert.equal(
+    report
+      .querySelector('button[aria-label="Upvote"]')
+      ?.getAttribute("aria-pressed"),
+    "false",
+  );
+  assert.match(
+    report.querySelector(".run-log-content")!.textContent!,
+    /SUCCESS/,
+  );
+  assert.equal(report.querySelectorAll('a[href^="/runs/"]').length, 0);
+  assert.equal(
+    report.querySelector(".report-actions button")?.textContent,
+    "Withdraw report",
+  );
+  assert.equal(report.querySelector("dialog"), null);
+  const edited = await read(`/report/1?edit=${id}`);
+  assert.ok(
+    edited.querySelector(
+      '.comment .editor form[action="/_actions/edit-comment"]',
+    ),
+  );
+  assert.ok(edited.querySelector('form[action="/_actions/comment"]'));
+  assert.equal(
+    edited.querySelector(".editor textarea")?.textContent,
+    "Original comment",
+  );
+  const confirmDelete = await read(`/report/1?delete=${id}`);
+  assert.ok(
+    confirmDelete.querySelector(
+      'dialog form[action="/_actions/delete-comment"]',
+    ),
+  );
+  const confirmWithdraw = await read("/report/1?withdraw=1");
+  assert.ok(
+    confirmWithdraw.querySelector('dialog form[action="/_actions/withdraw"]'),
+  );
+  assert.equal(
+    db.prepare("SELECT withdrawn_at FROM reports WHERE id=1").get()!
+      .withdrawn_at,
+    null,
+  );
+  const loggedOut = await read("/report/1", false);
+  assert.equal(
+    loggedOut.querySelectorAll('.vote input[name="sign_in"]').length,
+    2,
+  );
+  const home = await read("/");
+  assert.equal(home.querySelector('main a[href="/reports"]'), null);
+  db.prepare(
+    "INSERT INTO api_tokens(id,user_id,token_hash,scope,created_at,expires_at) VALUES('restore-token','alice','restore-hash','publish',?,?)",
+  ).run(
+    new Date().toISOString(),
+    new Date(Date.now() + 86400000).toISOString(),
+  );
+  const settings = await read("/settings");
+  assert.ok(
+    settings.querySelector('td form[action="/settings"] input[name="revoke"]'),
+  );
+  assert.equal(settings.querySelector("td details"), null);
+  const revoke = await read("/settings?revoke=restore-token");
+  assert.ok(
+    revoke.querySelector('#revoke-confirm form[action="/_actions/revoke"]'),
+  );
+  assert.equal(
+    db
+      .prepare("SELECT COUNT(*) n FROM api_tokens WHERE id='restore-token'")
+      .get()!.n,
+    1,
+  );
+  assert.equal(
+    settings.querySelectorAll('form[action="/_actions/preferences"] p label')
+      .length,
+    2,
+  );
 });

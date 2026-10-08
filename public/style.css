@@ -720,7 +720,46 @@ textarea {
   margin-inline: auto;
 }
 
-.inline-action { display: inline; margin: 0; }
-.inline-action button { width: auto; }
-.pagination { display: flex; gap: 24px; margin-block: 24px; }
-:target { scroll-margin-top: 24px; }
+.inline-action {
+  display: inline;
+  margin: 0;
+}
+.inline-action button {
+  width: auto;
+}
+.pagination {
+  display: flex;
+  gap: 24px;
+  margin-block: 24px;
+}
+:target {
+  scroll-margin-top: 24px;
+}
+
+.button-link {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid #767676;
+  border-radius: 2px;
+  background: #efefef;
+  color: #000;
+  font:
+    13px Arial,
+    sans-serif;
+  text-decoration: none;
+}
+.confirmation-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  margin: auto;
+  max-width: min(420px, 90vw);
+  border: 1px solid #999;
+  border-radius: 4px;
+  padding: 20px;
+  box-shadow: 0 0 0 100vmax #0005;
+}
+.confirmation-dialog .form-actions {
+  display: flex;
+  gap: 8px;
+}

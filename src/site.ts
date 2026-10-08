@@ -161,6 +161,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       fields: Record<string, unknown>,
       label: string,
       csrf = me.csrf || "",
+      buttonAttributes = "",
     ) =>
       `<form class="inline-action" method="post" action="/_actions/${enc(name)}">${Object.entries(
         { _csrf: csrf, _back: back, ...fields },
@@ -169,7 +170,22 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
           ([k, v]) =>
             `<input type="hidden" name="${escape(k)}" value="${escape(v)}">`,
         )
-        .join("")}<button>${escape(label)}</button></form>`;
+        .join("")}<button ${buttonAttributes}>${escape(label)}</button></form>`;
+    const navigateButton = (
+      fields: Record<string, unknown>,
+      label: string,
+      buttonAttributes = "",
+    ) =>
+      `<form class="inline-action" method="get" action="${escape(current.pathname)}">${Object.entries(
+        fields,
+      )
+        .map(
+          ([k, v]) =>
+            `<input type="hidden" name="${escape(k)}" value="${escape(v)}">`,
+        )
+        .join("")}<button ${buttonAttributes}>${escape(label)}</button></form>`;
+    const confirmation = (message: string, submit: string, cancel: string) =>
+      `<dialog open class="confirmation-dialog"><p>${escape(message)}</p><div class="form-actions">${submit}<a class="button-link" href="${escape(cancel)}">Cancel</a></div></dialog>`;
     const v = createViews(me, config, action);
     const {
       esc,
@@ -238,7 +254,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       const data = await get("/home");
       return result(
         "Rust API verification",
-        `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p>${search()}</section><div class="home-columns${config.show_home_discussion ? "" : " home-single-column"}"><section><h2>Recent reports</h2>${data.reports.map((item: any) => reportSummary(item)).join("") || "<p>No reports yet.</p>"}<p><a href="/reports">All reports →</a></p></section>${config.show_home_discussion ? `<section><h2>Latest discussion</h2>${data.discussion.map((cm: any) => `<article><a href="/report/${cm.report_id}?comment=${enc(cm.id)}#comment-${enc(cm.id)}">Report #${cm.report_id} · comment #${cm.sequence_no}</a><p>${esc(cm.body.slice(0, 200))}</p><p class="meta">${user(cm.author_id, cm.username)} · ${date(cm.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section>` : ""}</div>`,
+        `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p>${search()}</section><div class="home-columns${config.show_home_discussion ? "" : " home-single-column"}"><section><h2>Recent reports</h2>${data.reports.map((item: any) => reportSummary(item)).join("") || "<p>No reports yet.</p>"}</section>${config.show_home_discussion ? `<section><h2>Latest discussion</h2>${data.discussion.map((cm: any) => `<article><a href="/report/${cm.report_id}?comment=${enc(cm.id)}#comment-${enc(cm.id)}">Report #${cm.report_id} · comment #${cm.sequence_no}</a><p>${esc(cm.body.slice(0, 200))}</p><p class="meta">${user(cm.author_id, cm.username)} · ${date(cm.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section>` : ""}</div>`,
       );
     }
     if (p === "crates" && id) {
@@ -269,7 +285,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       );
       return result(
         "Crates",
-        `<h1>Crates</h1>${search(q)}<p class="meta">${q ? `${data.matching_count} matching · ` : ""}${data.total_count} crates total</p><div class="table-wrap"><table class="crate-list"><thead><tr><th>Crate</th><th>APIs</th><th>Reports</th><th>Claims</th><th>Updated</th></tr></thead><tbody>${data.items.map((item: any) => `<tr><td><a href="/crate/${enc(item.name)}">${esc(item.name)}</a></td><td>${item.api_count}</td><td>${item.report_count}</td><td>${item.claim_count}</td><td>${date(item.updated_at)}</td></tr>`).join("") || '<tr><td colspan="5">No matching crates.</td></tr>'}</tbody></table></div>${pagination(data)}`,
+        `<h1>Crates</h1>${search(q)}<p class="meta">${q ? `${data.matching_count} matching · ` : ""}${data.total_count} crates total</p><div class="table-wrap"><table class="crate-list"><thead><tr><th>Crate</th><th class="numeric" title="Distinct API paths across versions with public reports">APIs</th><th class="numeric">Reports</th><th class="numeric">Claims</th><th>Updated</th></tr></thead><tbody>${data.items.map((item: any) => `<tr><td><a href="/crate/${enc(item.name)}">${esc(item.name)}</a></td><td class="numeric">${item.api_count}</td><td class="numeric">${item.report_count}</td><td class="numeric">${item.claim_count}</td><td><time datetime="${esc(item.updated_at)}" title="${date(item.updated_at)}">${esc(item.updated_at?.slice(0, 10) || "—")}</time></td></tr>`).join("") || '<tr><td colspan="5">No matching crates.</td></tr>'}</tbody></table></div>${pagination(data)}`,
       );
     }
     if (p === "crate" && id) {
@@ -286,13 +302,19 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         current.searchParams.get("version") || releases.default_version;
       if (!version) throw new Fault(404, "crate_not_found");
       const apis = await get(`/crates/${enc(id)}/${enc(version)}/apis`);
+      const counts = await rows(
+        c.env.DB,
+        "SELECT COUNT(*) AS n FROM reports p JOIN releases r ON r.id=p.release_id JOIN crates c ON c.id=r.crate_id WHERE c.name=? AND r.version=? AND p.visibility='public' AND p.withdrawn_at IS NULL",
+        id,
+        version,
+      );
       const reports = await list(
         `/crates/${enc(id)}/${enc(version)}/reports`,
         (x) => reportSummary(x, true),
       );
       return result(
         `${id} ${version}`,
-        `${breadcrumbs([{ label: "crates", href: "/crates" }])}<h1>${esc(id)} ${esc(version)}</h1>${releases.description ? `<p>${esc(releases.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(id)}/${enc(version)}">crates.io</a></p><details><summary>Versions (${releases.items.length})</summary><ul>${releases.items.map((r: any) => `<li><a href="/crate/${enc(id)}?version=${enc(r.version)}"${r.version === version ? ' aria-current="page"' : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</a></li>`).join("")}</ul></details><h2 id="apis">APIs (${apis.items.length})</h2>${renderAPICatalog(apis.items, id)}<h2 id="reports">Reports</h2>${reports}`,
+        `${breadcrumbs([{ label: "crates", href: "/crates" }])}<h1>${esc(id)} ${esc(version)}</h1>${releases.description ? `<p>${esc(releases.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(id)}/${enc(version)}" target="_blank" rel="noopener noreferrer">crates.io</a></p><form method="get" action="/crate/${enc(id)}"><label>Version <select name="version" aria-label="Version">${releases.items.map((r: any) => `<option value="${esc(r.version)}"${r.version === version ? " selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label> <button>Go</button></form><h2 id="apis">APIs (${apis.items.length})</h2>${renderAPICatalog(apis.items, id)}<h2 id="reports">Reports (${counts[0].n})</h2>${reports}`,
       );
     }
     if (p === "api" && id) {
@@ -312,7 +334,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       const a = await get("/apis/" + enc(id));
       return result(
         a.display_path,
-        `${breadcrumbs(crateCrumbs(a, "apis"))}<h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="/book/publish-a-report.html">Publish a report</a></p><h2>Claims</h2>${await list("/apis/" + enc(id) + "/claims", claimItem)}`,
+        `${breadcrumbs(crateCrumbs(a, "apis"))}<h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="/book/publish-a-report.html">Publish a report</a></p><h2>Claims</h2>${await list("/apis/" + enc(id) + "/claims", claimItem)}`,
       );
     }
     if (p === "reports")
@@ -337,6 +359,8 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         `${breadcrumbs(claimCrumbs(item))}${!item.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${item.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${item.report_revision !== item.latest_report_revision ? `<p>From an earlier report revision. <a href="/report/${item.report_id}">Current report →</a></p>` : ""}${claimContent(item, true)}<p><a href="/report/${item.report_id}?v=${item.report_revision}#discussion">Read and join the discussion on the report →</a></p>`,
       );
     }
+    if (current.searchParams.has("sign_in"))
+      return c.redirect(config.login_url, 302);
     if (p === "report" && id) {
       const revision = current.searchParams.get("v");
       const item = await get(
@@ -383,6 +407,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
                 run,
                 index,
                 item,
+                true,
               ),
             );
           } catch {
@@ -396,6 +421,8 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
           `<div class="reproduce-body">${recorded.join("")}</div>`,
         );
       }
+      const commentForm = (editing: any, replying: any) =>
+        `${editing ? "" : `<h3>${replying ? "Reply to #" + replying.sequence_no : "Add a comment"}</h3>`}<form method="post" action="/_actions/${editing ? "edit-comment" : "comment"}" id="${editing ? "comment-editor-form" : "comment-form"}"><input type="hidden" name="_csrf" value="${esc(me.csrf)}"><input type="hidden" name="_back" value="/report/${item.id}?v=${item.revision_no}#discussion"><input type="hidden" name="id" value="${esc(editing?.id || item.id)}"><input type="hidden" name="edit_version" value="${editing?.edit_version || 0}"><input type="hidden" name="reply_to_id" value="${esc(replying?.id || "")}"><input type="hidden" name="_key" value="${crypto.randomUUID()}">${editing ? "" : `<label>Report revision <select name="revision_no">${history.map((h) => `<option value="${h.revision_no}"${h.revision_no === (replying?.revision_no || item.revision_no) ? " selected" : ""}>v${h.revision_no}</option>`).join("")}</select></label>`}<textarea name="body" required maxlength="5000" aria-label="Comment">${esc(editing?.body || "")}</textarea><p class="meta">By publishing, you agree to the <a href="/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="/privacy">Privacy Policy</a>.</p><button>${editing ? "Save" : "Post comment"}</button>${editing || replying ? ` <a href="/report/${item.id}?v=${item.revision_no}#discussion">Cancel</a>` : ""}</form>`;
       const byParent = new Map<string | null, any[]>();
       for (const cm of comments) {
         const key = cm.reply_to_id || null;
@@ -416,12 +443,30 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         seen.add(cm.id);
         const anchor = "comment-" + enc(cm.id);
         const commentLink = `/report/${item.id}?v=${cm.revision_no}#${anchor}`;
-        const controls =
-          me.user && !cm.deleted_at && !cm.hidden
-            ? `${[1, -1].map((value) => action("vote", { id: cm.id, value, on: cm.my_vote !== value }, value === 1 ? "▲" : "▼")).join("")} <a href="/report/${item.id}?v=${item.revision_no}&amp;reply=${enc(cm.id)}#comment-form">Reply</a>${me.user.id === cm.author_id ? ` <a href="/report/${item.id}?v=${item.revision_no}&amp;edit=${enc(cm.id)}#comment-form">Edit</a><details><summary>Delete</summary><p>Delete this comment? Its previous text is retained privately.</p>${action("delete-comment", { id: cm.id, edit_version: cm.edit_version }, "Confirm delete")}</details>` : ""}`
+        const vote =
+          !cm.deleted_at && !cm.hidden
+            ? `<span class="vote">${me.user ? action("vote", { id: cm.id, value: 1, on: cm.my_vote !== 1 }, "▲", me.csrf, `aria-label="Upvote" aria-pressed="${cm.my_vote === 1}"`) : navigateButton({ sign_in: "1" }, "▲", 'aria-label="Upvote" aria-pressed="false"')} ${cm.score} ${me.user ? action("vote", { id: cm.id, value: -1, on: cm.my_vote !== -1 }, "▼", me.csrf, `aria-label="Downvote" aria-pressed="${cm.my_vote === -1}"`) : navigateButton({ sign_in: "1" }, "▼", 'aria-label="Downvote" aria-pressed="false"')}</span>`
+            : "";
+        const controls = me.user
+          ? `${navigateButton({ v: item.revision_no, reply: cm.id }, "Reply")}${me.user.id === cm.author_id && !cm.deleted_at && !cm.hidden ? navigateButton({ v: item.revision_no, edit: cm.id }, "Edit") + navigateButton({ v: item.revision_no, delete: cm.id }, "Delete") : ""}`
+          : "";
+        const deleteConfirmation =
+          current.searchParams.get("delete") === cm.id &&
+          me.user?.id === cm.author_id &&
+          !cm.deleted_at &&
+          !cm.hidden
+            ? confirmation(
+                "Delete this comment? Its previous text is retained privately.",
+                action(
+                  "delete-comment",
+                  { id: cm.id, edit_version: cm.edit_version },
+                  "Delete",
+                ),
+                `/report/${item.id}?v=${item.revision_no}#${anchor}`,
+              )
             : "";
         rendered.push(
-          `<article class="comment" id="${esc("comment-" + cm.id)}"><div class="comment-top">${user(cm.author_id, cm.username)} <time>${date(cm.created_at)}</time> <a href="${commentLink}">v${cm.revision_no} · #${cm.sequence_no}</a> <span>${cm.score}</span></div><div class="comment-content"><p class="preserve">${cm.deleted_at ? "<em>deleted comment</em>" : cm.hidden ? "<em>hidden comment</em>" : esc(cm.body)}</p>${cm.edited_at ? '<p class="meta">Edited ' + date(cm.edited_at) + "</p>" : ""}</div><div class="comment-actions">${controls}</div></article><div class="comment-children">`,
+          `<article class="comment" id="${esc("comment-" + cm.id)}"><div class="comment-top">${user(cm.author_id, cm.username)} <time>${date(cm.created_at)}</time><a href="${commentLink}">v${cm.revision_no} · #${cm.sequence_no}</a>${vote}</div><div class="comment-content"><p class="preserve">${cm.deleted_at ? "<em>deleted comment</em>" : cm.hidden ? "<em>hidden comment</em>" : esc(cm.body)}</p>${cm.edited_at && !cm.deleted_at ? '<p class="meta">Edited ' + date(cm.edited_at) + "</p>" : ""}</div><div class="comment-actions">${controls}</div><div class="editor">${current.searchParams.get("edit") === cm.id ? "<!--comment-editor-->" : ""}</div>${deleteConfirmation}</article><div class="comment-children">`,
         );
         tasks.push("</div>");
         tasks.push(...(byParent.get(cm.id) || []).slice().reverse());
@@ -446,16 +491,27 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
           throw new Fault(403, "comment_edit_forbidden");
         if (replyID && (!replying || replying.hidden || replying.deleted_at))
           throw new Fault(400, "invalid_reply");
-        form = `<h3>${editing ? "Edit comment" : replying ? "Reply to #" + replying.sequence_no : "Add a comment"}</h3><form method="post" action="/_actions/${editing ? "edit-comment" : "comment"}" id="comment-form"><input type="hidden" name="_csrf" value="${esc(me.csrf)}"><input type="hidden" name="_back" value="/report/${item.id}?v=${item.revision_no}#discussion"><input type="hidden" name="id" value="${esc(editing?.id || item.id)}"><input type="hidden" name="edit_version" value="${editing?.edit_version || 0}"><input type="hidden" name="reply_to_id" value="${esc(replying?.id || "")}"><input type="hidden" name="_key" value="${crypto.randomUUID()}">${editing ? "" : `<label>Report revision <select name="revision_no">${history.map((h) => `<option value="${h.revision_no}"${h.revision_no === (replying?.revision_no || item.revision_no) ? " selected" : ""}>v${h.revision_no}</option>`).join("")}</select></label>`}<textarea name="body" required maxlength="5000" aria-label="Comment">${esc(editing?.body || "")}</textarea><p class="meta">By publishing, you agree to the <a href="/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="/privacy">Privacy Policy</a>.</p><button>${editing ? "Save" : "Post comment"}</button>${editing || replying ? ` <a href="/report/${item.id}?v=${item.revision_no}#discussion">Cancel</a>` : ""}</form>`;
+        form = commentForm(editing, replying);
       } else
         form = me.terms_required
           ? '<p><a href="/terms-update">Accept updated terms to comment.</a></p>'
           : '<p><a href="/auth/github?return_to=' +
             enc(back) +
             '">Sign in to comment.</a></p>';
+      if (current.searchParams.has("edit") && form) {
+        const index = rendered.findIndex((html) =>
+          html.includes("<!--comment-editor-->"),
+        );
+        if (index >= 0)
+          rendered[index] = rendered[index].replace(
+            "<!--comment-editor-->",
+            form,
+          );
+        form = commentForm(undefined, undefined);
+      }
       return result(
         `Report #${item.id} — ${item.title}`,
-        `${breadcrumbs(crateCrumbs(item, "reports"))}${reportContent(item, true)}<p class="meta">${user(item.author_id, item.username)} · ${date(item.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((h) => `<a href="/report/${item.id}?v=${h.revision_no}"${h.revision_no === item.revision_no ? ' aria-current="page"' : ""}>v${h.revision_no}</a>`).join(" · ")}${item.revision_no !== item.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${item.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}${me.user?.id === item.author_id && !item.withdrawn_at ? `<details><summary>Withdraw report</summary><p>Withdraw this report? Its history and discussion remain public.</p>${action("withdraw", { id: item.id }, "Confirm withdrawal")}</details>` : ""}${content}${reportAPIs(item)}<section id="discussion" class="discussion"><h2>Comments (${item.comment_count})</h2>${rendered.join("") || "<p>No comments.</p>"}${form}</section>`,
+        `${breadcrumbs(crateCrumbs(item, "reports"))}${reportContent(item, true)}<p class="meta">${user(item.author_id, item.username)} · ${date(item.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((h) => `<a href="/report/${item.id}?v=${h.revision_no}"${h.revision_no === item.revision_no ? ' aria-current="page"' : ""}>v${h.revision_no}</a>`).join(" · ")}${item.revision_no !== item.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${item.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === item.author_id && !item.withdrawn_at ? navigateButton({ v: item.revision_no, withdraw: "1" }, "Withdraw report") + (current.searchParams.has("withdraw") ? confirmation("Withdraw this report? Its history and discussion remain public.", action("withdraw", { id: item.id }, "Withdraw report"), `/report/${item.id}?v=${item.revision_no}`) : "") : ""}</div>${content}${reportAPIs(item)}<section id="discussion" class="discussion"><h2>Comments (${item.comment_count})</h2>${rendered.join("") || "<p>No comments.</p>"}${form}</section>`,
       );
     }
     if (p === "runs" && id) {
@@ -477,7 +533,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       const tools = await get("/tools");
       return result(
         "Verification tools",
-        `<h1>Verification tools</h1><p><a href="https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md">CLI setup and usage instructions</a></p>${tools.items.map((t: any) => `<article><h2><a href="/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/proofs-rs/proofs-rs/issues/new">Request a tool or version</a></p>`,
+        `<h1>Verification tools</h1><p><a href="https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI setup and usage instructions</a></p>${tools.items.map((t: any) => `<article><h2><a href="/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/proofs-rs/proofs-rs/issues/new">Request a tool or version</a></p>`,
       );
     }
     if (p === "tool" && id) {
@@ -545,7 +601,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       ]);
       return result(
         "Settings",
-        `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current.searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<h2>Email notifications</h2>${c.env.EMAIL_DISABLED === "true" ? "<p>Email notifications are currently disabled.</p>" : !(c.env.EMAIL && c.env.EMAIL_FROM) ? "<p>Email delivery is currently unavailable.</p>" : ""}<form method="post" action="/_actions/preferences"><input type="hidden" name="_csrf" value="${esc(me.csrf)}"><label><input type="checkbox" name="replies"${prefs.replies ? " checked" : ""}>Replies to my comments</label><label><input type="checkbox" name="report_comments"${prefs.report_comments ? " checked" : ""}>Comments on my reports</label><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${date(t.last_used_at) || "Never"}</td><td>${date(t.expires_at)}</td><td><details><summary>Revoke</summary><p>Revoke this token?</p>${action("revoke", { id: t.id }, "Confirm revoke")}</details></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="/contact">Contact</a>.</p>`,
+        `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current.searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<h2>Email notifications</h2>${c.env.EMAIL_DISABLED === "true" ? "<p>Email notifications are currently disabled.</p>" : !(c.env.EMAIL && c.env.EMAIL_FROM) ? "<p>Email delivery is currently unavailable.</p>" : ""}<form method="post" action="/_actions/preferences"><input type="hidden" name="_csrf" value="${esc(me.csrf)}"><p><label><input type="checkbox" name="replies"${prefs.replies ? " checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="report_comments"${prefs.report_comments ? " checked" : ""}> Comments on my reports</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${date(t.last_used_at) || "Never"}</td><td>${date(t.expires_at)}</td><td>${navigateButton({ revoke: t.id }, "Revoke")}</td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm">${tokens.items.some((t: any) => t.id === current.searchParams.get("revoke")) ? `<p>Revoke this token?</p><div class="form-actions">${action("revoke", { id: current.searchParams.get("revoke") }, "Revoke")}<a class="button-link" href="/settings">Cancel</a></div>` : ""}</div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="/contact">Contact</a>.</p>`,
       );
     }
     if (p === "signup") {

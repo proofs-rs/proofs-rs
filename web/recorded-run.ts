@@ -112,5 +112,5 @@ export function renderRecordedRun(
     Object.entries(run.environment || {})
       .map(([k, v]) => k + "=" + v)
       .join("\n") || "None recorded",
-  )}${item("Git repository", run.source.repository)}${item("Git commit", run.source.commit)}</dl></details>${includeLogs ? `<details class="run-logs" id="logs" open><summary>Diagnostics &amp; logs</summary><pre class="run-log-content">${esc(logs)}</pre></details>` : `<p><a href="/runs/${encodeURIComponent(id)}?report=${report.id}&amp;v=${report.revision_no}#logs">Diagnostics &amp; logs</a></p>`}</article>`;
+  )}${item("Git repository", run.source.repository)}${item("Git commit", run.source.commit)}</dl></details>${includeLogs ? `<details class="run-logs" id="logs"><summary>Diagnostics &amp; logs</summary><pre class="run-log-content">${esc(logs)}</pre></details>` : `<p><a href="/runs/${encodeURIComponent(id)}?report=${report.id}&amp;v=${report.revision_no}#logs">Diagnostics &amp; logs</a></p>`}</article>`;
 }
