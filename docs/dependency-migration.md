@@ -135,3 +135,15 @@ contents stay in R2, never Actions logs or artifacts. The existing backup-token
 secret is reused when available. Staging fixture seeding skips objects for existing
 run IDs, preserving migrated keys and hashes. The public smoke check also checks
 `/book/review-a-dependency.html` and its publishing tutorial link.
+
+
+Rollout logs include fixed phase names and allowlisted failure codes, never raw
+Cloudflare errors, private run IDs, archive keys, SQL, or record contents. Registered
+archive integrity is checked before the drain and again during conversion. For
+`archive_hash_size_mismatch`, keep maintenance in place and compare the indexed
+hash/size with private archive backups and the original record; never update a
+hash just to accept the current object. A permission failure during
+`export_database_backup` requires correcting the existing token's access or using
+the existing D1 backup-token secret before retrying. No backup check is bypassed.
+Retries conservatively repeat the 16-minute drain; a historical failure without a
+persisted fence timestamp cannot prove that old invocations have finished.

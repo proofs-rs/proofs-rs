@@ -9,6 +9,48 @@ import { planMigration, migrateRecord } from "./migrate-run-dependencies.mjs";
 import { readRecord } from "../src/runs.ts";
 const digest = (b) => createHash("sha256").update(b).digest("hex");
 import { gate, MARKER } from "./dependency-rollout-gate.mjs";
+export function safeFailureCode(error) {
+  const message = typeof error?.message === "string" ? error.message : "";
+  for (const [prefix, code] of [
+    ["Archive hash/size mismatch", "archive_hash_size_mismatch"],
+    ["Archive run ID mismatch", "archive_run_id_mismatch"],
+    ["Unsupported record schema", "unsupported_record_schema"],
+    ["Missing v2 dependency snapshot", "missing_dependency_snapshot"],
+    ["Database backup verification failed", "database_backup_mismatch"],
+    ["Migrated archive verification failed", "converted_object_mismatch"],
+    ["Stored dependency snapshot mismatch", "stored_snapshot_mismatch"],
+    ["Legacy record remains", "legacy_record_remaining"],
+    ["Run count changed", "run_count_changed"],
+    ["Wrangler operation could not start", "wrangler_start_failed"],
+  ])
+    if (message.startsWith(prefix)) return code;
+  if (
+    [
+      "invalid_sarif",
+      "invalid_proofs_sarif",
+      "embedded_log_required",
+      "embedded_source_not_allowed",
+      "invalid_command",
+      "invalid_run_times",
+      "invalid_run_contracts",
+      "invalid_run_contract",
+      "unverified_contract",
+      "unsuccessful_run",
+    ].includes(error?.code)
+  )
+    return error.code;
+  const wrangler =
+    /^Wrangler (deploy|d1) operation failed(?: \(code (\d{4,6})\))?$/.exec(
+      message,
+    );
+  if (wrangler)
+    return `wrangler_${wrangler[1]}_failed${wrangler[2] ? "_" + wrangler[2] : ""}`;
+  const maintenance =
+    /^Maintenance ([a-z-]+) operation failed \((\d{3})\)$/.exec(message);
+  if (maintenance) return `maintenance_http_${maintenance[2]}`;
+  if (error instanceof SyntaxError) return "invalid_json";
+  return "unclassified_failure";
+}
 export function maintenanceConfig(config, token) {
   return {
     ...config,
@@ -43,16 +85,32 @@ async function command(args, env = process.env) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.resume();
-    child.stderr.resume();
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk.toString()).slice(-32768);
+    });
     child.on("error", () =>
       reject(Error("Wrangler operation could not start")),
     );
     child.on("exit", (code) =>
       code === 0
         ? resolvePromise()
-        : reject(Error(`Wrangler ${args[0]} operation failed`)),
+        : reject(
+            Error(
+              `Wrangler ${args[0]} operation failed${/\[code:\s*(\d{4,6})\]/.exec(stderr)?.[1] ? " (code " + /\[code:\s*(\d{4,6})\]/.exec(stderr)[1] + ")" : ""}`,
+            ),
+          ),
     );
   });
+}
+export async function verifyRegisteredRecords(index, client) {
+  for (const row of index) {
+    const bytes = Buffer.from(
+      await client("GET", "object", undefined, row.r2_key),
+    );
+    const migrated = migrateRecord(bytes, row);
+    readRecord(JSON.parse((migrated?.bytes || bytes).toString()));
+  }
 }
 export async function migrateArchive(
   index,
@@ -60,7 +118,9 @@ export async function migrateArchive(
   archive,
   output,
   backupPrefix,
+  progress = () => {},
 ) {
+  progress("verify_registered_records");
   for (const row of index) {
     const bytes = Buffer.from(
       await client("GET", "object", undefined, row.r2_key),
@@ -80,7 +140,9 @@ export async function migrateArchive(
       `${backupPrefix}/runs/${row.id}.sarif.json`,
     );
   }
+  progress("plan_conversion");
   const manifest = await planMigration(index, archive, output);
+  progress("upload_converted_records");
   for (const entry of manifest) {
     const bytes = await readFile(join(output, entry.key));
     // Outside runs/: an old scheduled invocation cannot sweep unindexed new objects.
@@ -104,7 +166,9 @@ export async function migrateArchive(
       entry.key.replaceAll("'", "''"),
     );
   }
+  progress("apply_guarded_index");
   await client("POST", "apply", { statements: atomicStatements(sql) });
+  progress("verify_saved_snapshots");
   const after = await client("GET", "index");
   const snapshots = await client("GET", "snapshots");
   if (after.length !== index.length)
@@ -217,12 +281,18 @@ async function rollout(configPath, origin, staging = false) {
       ? response.arrayBuffer()
       : response.json();
   };
+  let phase = "prepare_maintenance";
+  const progress = (next) => {
+    phase = next;
+    console.log(`Dependency rollout phase: ${phase}`);
+  };
   try {
     await writeFile(
       maintenancePath,
       JSON.stringify(maintenanceConfig(config, token)),
       { mode: 0o600 },
     );
+    progress("deploy_maintenance");
     await command(["deploy", "--config", maintenancePath]);
     console.log(
       "Maintenance Worker deployed; writes, scheduled work and queue processing stopped.",
@@ -240,7 +310,13 @@ async function rollout(configPath, origin, staging = false) {
     }
     if (!ready) throw Error("Maintenance deployment did not become reachable");
     // Fence old in-flight D1 writes before the backup. Keep retries queued.
+    progress("fence_writes");
     await client("POST", "lock", {});
+    // Read-only integrity preflight exposes deterministic archive failures before
+    // the long drain; all records are checked again after backups and draining.
+    progress("preflight_registered_records");
+    await verifyRegisteredRecords(await client("GET", "index"), client);
+    progress("drain_previous_invocations");
     // Queue/scheduled old invocations have a 15-minute wall-time ceiling. Give
     // them a full drain window before releasing the write fences. Log no data.
     console.log(
@@ -249,6 +325,7 @@ async function rollout(configPath, origin, staging = false) {
     for (let minute = 0; minute < 16; minute++)
       await new Promise((resolveWait) => setTimeout(resolveWait, 60_000));
     // Confirm this exact maintenance deployment is serving before snapshotting.
+    progress("read_run_index");
     const index = await client("GET", "index");
     const dump = join(work, "database.sql");
     const exportEnv = {
@@ -257,6 +334,7 @@ async function rollout(configPath, origin, staging = false) {
         process.env.CLOUDFLARE_D1_BACKUP_TOKEN ||
         process.env.CLOUDFLARE_API_TOKEN,
     };
+    progress("export_database_backup");
     await command(
       [
         "d1",
@@ -270,6 +348,7 @@ async function rollout(configPath, origin, staging = false) {
       ],
       exportEnv,
     );
+    progress("verify_database_backup");
     const dumpBytes = await readFile(dump);
     await client("PUT", "object", dumpBytes, `${backupPrefix}/database.sql`);
     const backup = Buffer.from(
@@ -277,6 +356,7 @@ async function rollout(configPath, origin, staging = false) {
     );
     if (digest(backup) !== digest(dumpBytes))
       throw Error("Database backup verification failed");
+    progress("copy_archive_backup");
     let cursor;
     do {
       const page = await client(
@@ -293,6 +373,7 @@ async function rollout(configPath, origin, staging = false) {
         });
       cursor = page.cursor;
     } while (cursor);
+    progress("apply_schema_migrations");
     await command([
       "d1",
       "migrations",
@@ -308,15 +389,22 @@ async function rollout(configPath, origin, staging = false) {
       join(work, "archive"),
       join(work, "converted"),
       backupPrefix,
+      progress,
     );
+    progress("release_write_fences");
     await client("POST", "unlock", {});
+    progress("completion_gate");
     await gate(config);
     // Only the reviewed schema-v2 Worker can resume serving. Never restore the old Worker.
+    progress("deploy_current_worker");
     await command(["deploy", "--config", configPath]);
     console.log(
       `Dependency rollout complete; ${changed} run records converted and the schema-v2 Worker deployed. Private backups remain in R2.`,
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      `Dependency rollout failure: phase=${phase} code=${safeFailureCode(error)}`,
+    );
     console.error(
       "Dependency rollout failed. Keep the target environment in maintenance and rerun the dedicated workflow after investigation; do not restore the old Worker. Private backups remain in R2.",
     );

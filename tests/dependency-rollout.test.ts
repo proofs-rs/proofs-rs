@@ -10,6 +10,8 @@ import maintenance from "../scripts/dependency-maintenance";
 import {
   maintenanceConfig,
   assertStagingTarget,
+  safeFailureCode,
+  verifyRegisteredRecords,
   migrateArchive,
 } from "../scripts/dependency-rollout.mjs";
 import { gate, MARKER } from "../scripts/dependency-rollout-gate.mjs";
@@ -397,4 +399,53 @@ test("staging rollout rejects production resources before maintenance", () => {
       workflow.indexOf("wrangler deploy"),
   );
   assert.match(workflow, /group: proofs-rs-staging/);
+});
+
+test("rollout diagnostics expose only fixed codes, never private error text", () => {
+  assert.equal(
+    safeFailureCode(Error("Archive hash/size mismatch for private-run-id")),
+    "archive_hash_size_mismatch",
+  );
+  assert.equal(
+    safeFailureCode(Error("Wrangler d1 operation failed (code 7403)")),
+    "wrangler_d1_failed_7403",
+  );
+  assert.equal(
+    safeFailureCode(Error("Maintenance object operation failed (404)")),
+    "maintenance_http_404",
+  );
+  assert.equal(
+    safeFailureCode({ code: "invalid_proofs_sarif" }),
+    "invalid_proofs_sarif",
+  );
+  for (const error of [
+    Error("private SQL and archive/key"),
+    { code: "secret" },
+    Error("Wrangler d1 operation failed (code secret)"),
+  ])
+    assert.equal(safeFailureCode(error), "unclassified_failure");
+});
+
+test("registered archive preflight rejects corruption without writing", async () => {
+  const bytes = readFileSync(
+    new URL("../fixtures/layout-run-0.sarif.json", import.meta.url),
+  );
+  const document = JSON.parse(bytes.toString());
+  const row = {
+    id: document.runs[0].automationDetails.guid,
+    sha256: hash(bytes),
+    size: bytes.length,
+    r2_key: "private/key",
+  };
+  const calls: string[] = [];
+  const client = async (method: string, action: string) => {
+    calls.push(method + " " + action);
+    return bytes;
+  };
+  await verifyRegisteredRecords([row], client);
+  await assert.rejects(
+    verifyRegisteredRecords([{ ...row, size: bytes.length + 1 }], client),
+    /hash\/size mismatch/,
+  );
+  assert.deepEqual(calls, ["GET object", "GET object"]);
 });
