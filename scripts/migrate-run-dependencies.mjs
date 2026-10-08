@@ -49,7 +49,12 @@ export function migrateRecord(bytes, row) {
   };
 }
 
-export async function planMigration(rows, inputDirectory, outputDirectory) {
+export async function planMigration(
+  rows,
+  inputDirectory,
+  outputDirectory,
+  transform = migrateRecord,
+) {
   if (resolve(inputDirectory) === resolve(outputDirectory))
     throw Error("Output must differ from the archive backup");
   const manifest = [],
@@ -60,7 +65,7 @@ export async function planMigration(rows, inputDirectory, outputDirectory) {
   for (const row of rows) {
     if (seen.has(row.id)) throw Error("Duplicate run ID");
     seen.add(row.id);
-    const result = migrateRecord(
+    const result = transform(
       await readFile(safePath(inputDirectory, row.r2_key)),
       row,
     );

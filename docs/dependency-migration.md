@@ -116,3 +116,55 @@ new schema-v2 run is necessary to add reviews because the historical empty
 snapshot cannot establish their presence. The service has no continuing legacy
 exception. Existing report histories and empty declarations both return the same
 `dependencies: []` representation.
+
+
+## Staging rollout
+
+Trusted `staging/*` pull requests use the existing Staging workflow. Before normal
+migration/deployment, it runs the same one-time conversion against strictly guarded
+staging Worker, D1, R2, queue names and origin. Production routes/resources are
+rejected before maintenance. It retains all existing runs, backs up D1 and private
+R2, fences writes and drains old invocations for 16 minutes, verifies converted
+objects and snapshots, then deploys the v2 Worker. No fixture reset is required.
+
+After the completion marker is present and maintenance fences are absent, later
+staging deployments skip conversion and require the read-only completion gate.
+A failed initial rollout leaves staging in maintenance: investigate and rerun the
+same trusted staging PR workflow; do not restore the old Worker. Private backup
+contents stay in R2, never Actions logs or artifacts. The existing backup-token
+secret is reused when available. Staging fixture seeding skips objects for existing
+run IDs, preserving migrated keys and hashes. The public smoke check also checks
+`/book/review-a-dependency.html` and its publishing tutorial link.
+
+
+Rollout logs include fixed phase names and allowlisted failure codes, never raw
+Cloudflare errors, private run IDs, archive keys, SQL, or record contents. Registered
+archive integrity is checked before the drain and again during conversion. For
+`archive_hash_size_mismatch`, keep maintenance in place and compare the indexed
+hash/size with private archive backups and the original record; never update a
+hash just to accept the current object. A permission failure during
+`export_database_backup` requires correcting the existing token's access or using
+the existing D1 backup-token secret before retrying. No backup check is bypassed.
+Retries conservatively repeat the 16-minute drain; a historical failure without a
+persisted fence timestamp cannot prove that old invocations have finished.
+
+
+Maintenance HTTP failures also identify the fixed action and classify the response
+as maintenance, operation failure, or other, without exposing its body. Reads,
+object uploads, lock installation and backup copies retry transient network or
+408/429/502/503/504 failures up to 12 attempts with bounded backoff. This tolerates
+old maintenance-token deployments still serving during propagation. Atomic apply
+and unlock are never retried automatically when their result is uncertain.
+
+
+The staging operator additionally recognizes exactly two historical synthetic
+layout fixtures from commit `40d3a7f` (original SHA-256
+`9ffcb3cc0ebaa92bfe4fb9c96e3ca8f68726b44f77e316c68e9e565170e4f11a`,
+1827 bytes). Those fixtures lacked a run GUID and required record metadata. Exact
+reserved IDs, keys, indexed hash/size and original byte hash must all match before
+normalizing to the explicit synthetic metadata added in PR38. Logs, results,
+provenance and original contract fields remain unchanged; this is still a synthetic
+demo with no verification performed. Original objects and private backups are
+retained, index identities are preserved, and new immutable objects use the same
+guarded atomic migration. Unknown or changed records still fail. This exception
+exists only in the one-time staging operator, never uploads or production rollout.

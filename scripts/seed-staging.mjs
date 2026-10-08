@@ -56,6 +56,14 @@ for (let n = 0; n < 2; n++) {
   const manifest = JSON.parse(
     await readFile("fixtures/layout-runs.json", "utf8"),
   );
+  // Existing rows may point to migrated immutable objects. Never overwrite their
+  // original fixture objects or alter their stored hashes/keys on repeated seeding.
+  const id = manifest[n].split("/").at(-1).replace(".sarif.json", "");
+  const existing = await api(`/d1/database/${db.uuid}/query`, {
+    sql: "SELECT id FROM verification_runs WHERE id=?",
+    params: [id],
+  });
+  if (existing[0].results.length) continue;
   execFileSync(
     "npx",
     [

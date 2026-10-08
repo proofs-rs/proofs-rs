@@ -9,8 +9,14 @@ import { tmpdir } from "node:os";
 import maintenance from "../scripts/dependency-maintenance";
 import {
   maintenanceConfig,
+  assertStagingTarget,
+  safeFailureCode,
+  maintenanceRequest,
+  verifyRegisteredRecords,
   migrateArchive,
 } from "../scripts/dependency-rollout.mjs";
+import { repairStagingFixture } from "../scripts/staging-fixture-repair.mjs";
+import { migrateRecord } from "../scripts/migrate-run-dependencies.mjs";
 import { gate, MARKER } from "../scripts/dependency-rollout-gate.mjs";
 const hash = (data: Uint8Array) =>
   createHash("sha256").update(data).digest("hex");
@@ -345,5 +351,289 @@ test("private archive backups include non-SARIF evidence and never recursively c
     assert.equal(objects.has("docs/overwrite.json"), false);
   } finally {
     db.close();
+  }
+});
+
+test("staging rollout rejects production resources before maintenance", () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"),
+  );
+  const origin = "https://proofs-rs-staging.proofs-rs.workers.dev";
+  config.vars.APP_ORIGIN = origin;
+  assertStagingTarget(config, origin);
+  for (const mutate of [
+    (x: any) => {
+      x.name = "proofs-rs";
+    },
+    (x: any) => {
+      x.vars.ENVIRONMENT = "production";
+    },
+    (x: any) => {
+      x.d1_databases[0].database_name = "proofs-rs-production-reports-v1";
+    },
+    (x: any) => {
+      x.r2_buckets[0].bucket_name = "proofs-rs-production-reports-v1";
+    },
+    (x: any) => {
+      x.queues.consumers[0].queue = "proofs-rs-production-reports-jobs";
+    },
+    (x: any) => {
+      x.routes = [{ pattern: "proofs.rs", custom_domain: true }];
+    },
+  ]) {
+    const wrong = structuredClone(config);
+    mutate(wrong);
+    assert.throws(() => assertStagingTarget(wrong, origin), /isolated staging/);
+  }
+  assert.throws(
+    () => assertStagingTarget(config, "https://proofs.rs"),
+    /isolated staging/,
+  );
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy.yml", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    workflow.indexOf("dependency-rollout.mjs staging") <
+      workflow.indexOf("d1 migrations apply"),
+  );
+  assert.ok(
+    workflow.indexOf("dependency-rollout-gate.mjs") <
+      workflow.indexOf("wrangler deploy"),
+  );
+  assert.match(workflow, /group: proofs-rs-staging/);
+});
+
+test("rollout diagnostics expose only fixed codes, never private error text", () => {
+  assert.equal(
+    safeFailureCode(Error("Archive hash/size mismatch for private-run-id")),
+    "archive_hash_size_mismatch",
+  );
+  assert.equal(
+    safeFailureCode(Error("Wrangler d1 operation failed (code 7403)")),
+    "wrangler_d1_failed_7403",
+  );
+  assert.equal(
+    safeFailureCode(Error("Maintenance object operation failed (404)")),
+    "maintenance_object_http_404",
+  );
+  assert.equal(
+    safeFailureCode({ code: "invalid_proofs_sarif" }),
+    "invalid_proofs_sarif",
+  );
+  for (const error of [
+    Error("private SQL and archive/key"),
+    { code: "secret" },
+    Error("Wrangler d1 operation failed (code secret)"),
+  ])
+    assert.equal(safeFailureCode(error), "unclassified_failure");
+});
+
+test("registered archive preflight rejects corruption without writing", async () => {
+  const bytes = readFileSync(
+    new URL("../fixtures/layout-run-0.sarif.json", import.meta.url),
+  );
+  const document = JSON.parse(bytes.toString());
+  const row = {
+    id: document.runs[0].automationDetails.guid,
+    sha256: hash(bytes),
+    size: bytes.length,
+    r2_key: "private/key",
+  };
+  const calls: string[] = [];
+  const client = async (method: string, action: string) => {
+    calls.push(method + " " + action);
+    return bytes;
+  };
+  await verifyRegisteredRecords([row], client);
+  await assert.rejects(
+    verifyRegisteredRecords([{ ...row, size: bytes.length + 1 }], client),
+    /hash\/size mismatch/,
+  );
+  assert.deepEqual(calls, ["GET object", "GET object"]);
+});
+
+test("maintenance safely retries propagation and transient reads and idempotent writes", async () => {
+  for (const [method, action] of [
+    ["GET", "index"],
+    ["GET", "object"],
+    ["PUT", "object"],
+    ["POST", "lock"],
+    ["POST", "copy"],
+  ]) {
+    let calls = 0;
+    const fetcher: typeof fetch = async () =>
+      ++calls === 1
+        ? new Response("Maintenance in progress. Please retry later.", {
+            status: 503,
+          })
+        : Response.json({ ok: true });
+    const response = await maintenanceRequest(
+      method,
+      action,
+      new URL("https://example.invalid"),
+      { method },
+      fetcher,
+      async () => {},
+    );
+    assert.equal(response.status, 200);
+    assert.equal(calls, 2);
+  }
+});
+
+test("maintenance retry is bounded and never retries apply or unlock", async () => {
+  for (const action of ["apply", "unlock", "object"]) {
+    let calls = 0;
+    await assert.rejects(
+      maintenanceRequest(
+        action === "object" ? "GET" : "POST",
+        action,
+        new URL("https://example.invalid"),
+        {},
+        async () => {
+          calls++;
+          return new Response("private body and secret token", { status: 503 });
+        },
+        async () => {},
+      ),
+      (error: any) => {
+        assert.equal(
+          safeFailureCode(error),
+          `maintenance_${action}_http_503_other_response`,
+        );
+        assert.equal(error.message.includes("secret"), false);
+        return true;
+      },
+    );
+    assert.equal(calls, action === "object" ? 12 : 1);
+  }
+  let calls = 0;
+  await assert.rejects(
+    maintenanceRequest(
+      "POST",
+      "apply",
+      new URL("https://example.invalid"),
+      {},
+      async () => {
+        calls++;
+        throw Error("private network details");
+      },
+      async () => {},
+    ),
+    (error: any) =>
+      safeFailureCode(error) === "maintenance_apply_network_failure",
+  );
+  assert.equal(calls, 1);
+});
+
+test("historical synthetic fixture repair preserves content and rejects all non-exact matches", async () => {
+  const original = readFileSync(
+    new URL(
+      "../fixtures/migrations/staging-layout-original.sarif.json",
+      import.meta.url,
+    ),
+  );
+  const expected = JSON.parse(original.toString());
+  for (const id of [
+    "c9769922-6967-59a1-93c0-2a1fb7e1e5bf",
+    "5f6678ff-ff2e-5d08-80a9-7848968b9a7e",
+  ]) {
+    const row = {
+      id,
+      r2_key: `staging-layout-v1/${id}.sarif.json`,
+      sha256: hash(original),
+      size: original.length,
+    };
+    assert.throws(() => migrateRecord(original, row), /run ID mismatch/);
+    const repaired = repairStagingFixture(original, row)!;
+    assert.equal(
+      JSON.parse(repaired.bytes.toString()).runs[0].automationDetails.guid,
+      id,
+    );
+    const document = JSON.parse(repaired.bytes.toString());
+    delete document.runs[0].automationDetails;
+    const proofs = document.runs[0].properties.proofs;
+    for (const key of ["schemaVersion", "dependencies", "crate", "version"])
+      delete proofs[key];
+    for (const key of ["precondition", "file", "first_line", "last_line"])
+      delete proofs.contracts[0][key];
+    assert.deepEqual(document, expected); // logs/results/provenance and original contract fields unchanged
+    await verifyRegisteredRecords(
+      [row],
+      async () => original,
+      repairStagingFixture,
+    );
+    assert.equal(
+      repairStagingFixture(repaired.bytes, {
+        ...row,
+        r2_key: repaired.r2_key,
+        sha256: repaired.sha256,
+        size: repaired.size,
+      }),
+      null,
+    );
+    for (const wrong of [
+      { ...row, id: "unknown" },
+      { ...row, r2_key: "runs/private" },
+      { ...row, size: 1 },
+      { ...row, sha256: "wrong" },
+    ])
+      assert.throws(() => repairStagingFixture(original, wrong));
+    assert.throws(
+      () => repairStagingFixture(Buffer.from("modified"), row),
+      /hash\/size mismatch/,
+    );
+  }
+});
+
+test("synthetic fixture repair uses original backups and guarded immutable index migration", async () => {
+  const { db, client, objects } = fixture();
+  const work = await mkdtemp(join(tmpdir(), "staging-fixture-test-"));
+  try {
+    const bytes = readFileSync(
+      new URL(
+        "../fixtures/migrations/staging-layout-original.sarif.json",
+        import.meta.url,
+      ),
+    );
+    const id = "c9769922-6967-59a1-93c0-2a1fb7e1e5bf",
+      key = `staging-layout-v1/${id}.sarif.json`;
+    objects.set(key, bytes);
+    db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?)").run(
+      id,
+      key,
+      hash(bytes),
+      bytes.length,
+    );
+    await client("POST", "lock", {});
+    assert.equal(
+      await migrateArchive(
+        await client("GET", "index"),
+        client,
+        join(work, "archive"),
+        join(work, "converted"),
+        "backups/dependency-review-migration/test",
+        undefined,
+        repairStagingFixture,
+      ),
+      1,
+    );
+    const row: any = db.prepare("SELECT * FROM verification_runs").get();
+    assert.equal(row.id, id);
+    assert.notEqual(row.r2_key, key);
+    assert.deepEqual(objects.get(key), bytes);
+    assert.deepEqual(
+      Buffer.from(
+        objects.get(
+          `backups/dependency-review-migration/test/runs/${id}.sarif.json`,
+        )!,
+      ),
+      bytes,
+    );
+    await verifyRegisteredRecords([row], client);
+    assert.equal(hash(objects.get(row.r2_key)!), row.sha256);
+  } finally {
+    db.close();
+    await rm(work, { recursive: true, force: true });
   }
 });
