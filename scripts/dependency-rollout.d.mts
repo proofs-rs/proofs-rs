@@ -1,3 +1,4 @@
+export function assertStagingTarget(config: any, origin: string): void;
 export function maintenanceConfig(config: any, token: string): any;
 export function atomicStatements(sql: string): string[];
 export function migrateArchive(

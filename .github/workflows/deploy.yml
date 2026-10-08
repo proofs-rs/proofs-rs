@@ -13,12 +13,13 @@ jobs:
     # Only trusted staging/* PR branches may deploy using staging credentials.
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'staging/'))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     environment:
       name: staging
       url: ${{ steps.resources.outputs.url }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_D1_BACKUP_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -46,6 +47,10 @@ jobs:
           EMAIL_ALLOWLIST: ${{ vars.STAGING_EMAIL_ALLOWLIST }}
           EMAIL_DOMAIN: ${{ vars.STAGING_EMAIL_DOMAIN }}
           EMAIL_EVENT_SUBSCRIPTION: ${{ vars.STAGING_EMAIL_EVENT_SUBSCRIPTION }}
+      - name: Preserve existing runs with the one-time staging migration
+        run: node --import tsx scripts/dependency-rollout.mjs staging wrangler.staging.json '${{ steps.resources.outputs.url }}'
+      - name: Require completed dependency migration
+        run: node scripts/dependency-rollout-gate.mjs wrangler.staging.json
       - run: npx wrangler d1 migrations apply DB --remote --config wrangler.staging.json
       - run: npx wrangler deploy --config wrangler.staging.json
       - name: Configure secrets without logging values

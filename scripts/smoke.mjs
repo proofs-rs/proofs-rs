@@ -4,6 +4,7 @@ if (!origin?.startsWith("https://")) throw Error("Expected HTTPS URL");
 for (const path of [
   "/",
   "/api/docs",
+  "/book/review-a-dependency.html",
   "/openapi.json",
   "/api/v1/health",
   "/api/v1/home",
@@ -25,6 +26,14 @@ for (const path of [
     !r.headers.get("x-robots-tag")?.includes("noindex")
   )
     throw Error("Missing staging noindex header");
+  if (path === "/book/review-a-dependency.html") {
+    const html = await r.text();
+    if (
+      !html.includes("Review a dependency") ||
+      !html.includes('href="publish-a-report.html"')
+    )
+      throw Error("Dependency tutorial heading or publishing link missing");
+  }
   if (path === "/openapi.json" && (await r.json()).openapi !== "3.1.0")
     throw Error("Invalid OpenAPI document");
   if (path === "/api/v1/config") {

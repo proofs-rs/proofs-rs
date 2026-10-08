@@ -116,3 +116,22 @@ new schema-v2 run is necessary to add reviews because the historical empty
 snapshot cannot establish their presence. The service has no continuing legacy
 exception. Existing report histories and empty declarations both return the same
 `dependencies: []` representation.
+
+
+## Staging rollout
+
+Trusted `staging/*` pull requests use the existing Staging workflow. Before normal
+migration/deployment, it runs the same one-time conversion against strictly guarded
+staging Worker, D1, R2, queue names and origin. Production routes/resources are
+rejected before maintenance. It retains all existing runs, backs up D1 and private
+R2, fences writes and drains old invocations for 16 minutes, verifies converted
+objects and snapshots, then deploys the v2 Worker. No fixture reset is required.
+
+After the completion marker is present and maintenance fences are absent, later
+staging deployments skip conversion and require the read-only completion gate.
+A failed initial rollout leaves staging in maintenance: investigate and rerun the
+same trusted staging PR workflow; do not restore the old Worker. Private backup
+contents stay in R2, never Actions logs or artifacts. The existing backup-token
+secret is reused when available. Staging fixture seeding skips objects for existing
+run IDs, preserving migrated keys and hashes. The public smoke check also checks
+`/book/review-a-dependency.html` and its publishing tutorial link.

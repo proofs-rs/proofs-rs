@@ -77,11 +77,14 @@ The pages display `trusted_assumptions` as **What is trusted** and `limitations`
 
 ### Declare dependency reviews
 
+For a walkthrough from choosing evidence to inspecting the published list, see
+[Review a dependency](review-a-dependency.md).
+
 You may add fixed evidence references to `proofs.toml`:
 
 ```toml
 [dependencies]
-serde = { report = 123, revision = 2 }
+serde = { report = 123, revision = 2 } # Placeholder numbers: replace with your evidence
 ```
 
 Use the dependency's actual Cargo package name, including when your manifest uses

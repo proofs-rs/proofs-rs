@@ -26,7 +26,7 @@ export async function gate(config, fetcher = fetch, env = process.env) {
     row = body.result?.[0]?.results?.[0];
   if (!body.success || row?.value !== "complete" || row?.maintenance !== 0)
     throw Error(
-      "Dependency snapshot v2 rollout is incomplete. Run the dedicated migration workflow before production deployment.",
+      "Dependency snapshot v2 rollout is incomplete. Run the dedicated migration workflow before deployment.",
     );
 }
 if (

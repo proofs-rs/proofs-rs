@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import maintenance from "../scripts/dependency-maintenance";
 import {
   maintenanceConfig,
+  assertStagingTarget,
   migrateArchive,
 } from "../scripts/dependency-rollout.mjs";
 import { gate, MARKER } from "../scripts/dependency-rollout-gate.mjs";
@@ -346,4 +347,54 @@ test("private archive backups include non-SARIF evidence and never recursively c
   } finally {
     db.close();
   }
+});
+
+test("staging rollout rejects production resources before maintenance", () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"),
+  );
+  const origin = "https://proofs-rs-staging.proofs-rs.workers.dev";
+  config.vars.APP_ORIGIN = origin;
+  assertStagingTarget(config, origin);
+  for (const mutate of [
+    (x: any) => {
+      x.name = "proofs-rs";
+    },
+    (x: any) => {
+      x.vars.ENVIRONMENT = "production";
+    },
+    (x: any) => {
+      x.d1_databases[0].database_name = "proofs-rs-production-reports-v1";
+    },
+    (x: any) => {
+      x.r2_buckets[0].bucket_name = "proofs-rs-production-reports-v1";
+    },
+    (x: any) => {
+      x.queues.consumers[0].queue = "proofs-rs-production-reports-jobs";
+    },
+    (x: any) => {
+      x.routes = [{ pattern: "proofs.rs", custom_domain: true }];
+    },
+  ]) {
+    const wrong = structuredClone(config);
+    mutate(wrong);
+    assert.throws(() => assertStagingTarget(wrong, origin), /isolated staging/);
+  }
+  assert.throws(
+    () => assertStagingTarget(config, "https://proofs.rs"),
+    /isolated staging/,
+  );
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy.yml", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    workflow.indexOf("dependency-rollout.mjs staging") <
+      workflow.indexOf("d1 migrations apply"),
+  );
+  assert.ok(
+    workflow.indexOf("dependency-rollout-gate.mjs") <
+      workflow.indexOf("wrangler deploy"),
+  );
+  assert.match(workflow, /group: proofs-rs-staging/);
 });

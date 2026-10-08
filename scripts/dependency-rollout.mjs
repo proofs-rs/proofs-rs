@@ -130,13 +130,56 @@ export async function migrateArchive(
   }
   return manifest.length;
 }
-async function rollout(configPath, origin) {
+export function assertStagingTarget(config, origin) {
+  const resource = "proofs-rs-staging-reports-v1";
+  if (
+    config.name !== "proofs-rs-staging" ||
+    config.vars?.ENVIRONMENT !== "staging" ||
+    origin !== "https://proofs-rs-staging.proofs-rs.workers.dev" ||
+    config.vars.APP_ORIGIN !== origin ||
+    (config.routes?.length || 0) !== 0 ||
+    config.d1_databases?.length !== 1 ||
+    config.d1_databases[0].binding !== "DB" ||
+    config.d1_databases[0].database_name !== resource ||
+    config.r2_buckets?.length !== 1 ||
+    config.r2_buckets[0].binding !== "ARCHIVE" ||
+    config.r2_buckets[0].bucket_name !== resource ||
+    config.queues?.producers?.length !== 1 ||
+    config.queues.producers[0].queue !== "proofs-rs-staging-reports-jobs" ||
+    config.queues?.consumers?.length !== 1 ||
+    config.queues.consumers[0].queue !== "proofs-rs-staging-reports-jobs" ||
+    config.queues.consumers[0].dead_letter_queue !==
+      "proofs-rs-staging-reports-dead"
+  )
+    throw Error("Expected isolated staging resources and origin");
+}
+async function rollout(configPath, origin, staging = false) {
   if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_API_TOKEN)
     throw Error(
       "Existing Cloudflare credentials are required; no deployment attempted",
     );
   const config = JSON.parse(await readFile(configPath, "utf8"));
-  if (config.vars?.ENVIRONMENT !== "production" || config.name !== "proofs-rs")
+  if (staging) {
+    assertStagingTarget(config, origin);
+    try {
+      await gate(config);
+      console.log(
+        "Staging dependency migration already complete; normal deployment may proceed.",
+      );
+      return;
+    } catch (error) {
+      if (
+        !error.message.startsWith(
+          "Dependency snapshot v2 rollout is incomplete.",
+        )
+      )
+        throw error;
+    }
+  }
+  if (
+    !staging &&
+    (config.vars?.ENVIRONMENT !== "production" || config.name !== "proofs-rs")
+  )
     throw Error("Expected production deployment config");
   if (!/^https:\/\//.test(origin))
     throw Error("Maintenance origin must use HTTPS");
@@ -275,7 +318,7 @@ async function rollout(configPath, origin) {
     );
   } catch {
     console.error(
-      "Dependency rollout failed. Keep production in maintenance and rerun the dedicated workflow after investigation; do not restore the old Worker. Private backups remain in R2.",
+      "Dependency rollout failed. Keep the target environment in maintenance and rerun the dedicated workflow after investigation; do not restore the old Worker. Private backups remain in R2.",
     );
     throw Error("Dependency rollout failed; no automatic rollback performed");
   } finally {
@@ -289,6 +332,7 @@ if (
 ) {
   const [mode, configPath, origin] = process.argv.slice(2);
   if (mode === "migrate") await rollout(configPath, origin);
+  else if (mode === "staging") await rollout(configPath, origin, true);
   else
     throw Error(
       "Usage: node --import tsx scripts/dependency-rollout.mjs migrate config.json [https://origin]",
