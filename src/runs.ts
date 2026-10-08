@@ -255,7 +255,7 @@ runs.post(
         quota(c.env.DB, u.id, "verification_run", 90),
         stmt(
           c.env.DB,
-          "INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO verification_runs(id,author_id,crate,version,tool_version_id,sha256,size,r2_key,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
           run,
           u.id,
           record.crate,

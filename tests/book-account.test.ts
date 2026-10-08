@@ -7,7 +7,7 @@ for (const showStarKarma of [false, true])
   for (const signedIn of [false, true]) {
     test(`Book account navigation and logout (signed in: ${signedIn}, reactions: ${showStarKarma})`, async () => {
       const dom = new JSDOM(
-        '<div id="account-nav"><a href="/#/account">Account</a></div><p>Readers can inspect past contributions.<span data-star-karma-score></span></p><h2 id="reproduce">Reproduce</h2>',
+        '<div id="account-nav"><a href="/account">Account</a></div><p>Readers can inspect past contributions.<span data-star-karma-score></span></p><h2 id="reproduce">Reproduce</h2>',
         {
           url: "https://example.test/book/concepts.html",
           runScripts: "outside-only",
@@ -77,11 +77,11 @@ for (const showStarKarma of [false, true])
             ]),
             [
               [
-                "/#/account",
+                "/account",
                 showStarKarma ? "My activity (12 karma)" : "My activity",
               ],
-              ["/#/settings", "Settings"],
-              ["/#/admin/catalogs", "Catalogs"],
+              ["/settings", "Settings"],
+              ["/admin/catalogs", "Catalogs"],
             ],
           );
           assert.equal(
@@ -143,10 +143,10 @@ for (const role of ["user", "admin"]) {
           "Sign out",
         ],
       );
-      assert.equal(menu.querySelector("a")?.getAttribute("href"), "#/account");
+      assert.equal(menu.querySelector("a")?.getAttribute("href"), "/account");
       assert.equal(
         menu.querySelectorAll("a")[1].getAttribute("href"),
-        "#/settings",
+        "/settings",
       );
       summary.click();
       assert.equal(menu.open, false);

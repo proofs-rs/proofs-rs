@@ -1,3 +1,7 @@
+-- Structural barrier: old schema-v1 upload code used a positional nine-column
+-- INSERT and cannot register new legacy records after maintenance is released.
+-- Current uploads name their columns explicitly; all current records are v2.
+ALTER TABLE verification_runs ADD COLUMN snapshot_schema_version INTEGER NOT NULL DEFAULT 2 CHECK(snapshot_schema_version=2);
 CREATE TABLE run_dependencies (
   run_id TEXT NOT NULL REFERENCES verification_runs(id),
   crate TEXT NOT NULL,

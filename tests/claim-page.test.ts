@@ -1,24 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
-import ts from "typescript";
+import { createViews } from "../src/site-views";
 
 test("claim layout preserves scoped content, escaping, and revision context", () => {
-  const source = ts.createSourceFile(
-    "main.ts",
-    readFileSync(new URL("../web/main.ts", import.meta.url), "utf8"),
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  const names = ["claimContent", "claimScope", "toolLimitations", "toolLink"];
-  const functions = source.statements
-    .filter((n) => ts.isFunctionDeclaration(n) && names.includes(n.name!.text))
-    .map((n) => n.getText(source))
-    .join("\n");
-  const dom = new JSDOM("<main></main>", { runScripts: "outside-only" });
-  const w = dom.window as any;
-  w.c = {
+  const c = {
     id: "one",
     claim_number: 1,
     title: "Claim",
@@ -44,20 +30,13 @@ test("claim layout preserves scoped content, escaping, and revision context", ()
     tool_limitations: "Tool limit",
     environment: "Environment text",
   };
-  w.eval(
-    ts.transpileModule(
-      `const enc=encodeURIComponent;const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');const prop=()=> 'Panic contract';const date=v=>v;` +
-        functions +
-        `;document.querySelector('main').innerHTML=claimContent(c);`,
-      {
-        compilerOptions: {
-          module: ts.ModuleKind.None,
-          target: ts.ScriptTarget.ES2022,
-        },
-      },
-    ).outputText,
+  const { claimContent, reportContent, reportBody, reportAPIs } = createViews(
+    { user: null },
+    { show_star_karma: false },
+    () => "",
   );
-  const d = w.document;
+  const dom = new JSDOM("<main>" + claimContent(c) + "</main>");
+  const d: any = dom.window.document;
   for (const value of [
     "Valid pointer",
     "Claim <script>text</script>",
@@ -70,7 +49,7 @@ test("claim layout preserves scoped content, escaping, and revision context", ()
     assert.ok(d.body.textContent.includes(value), value);
   assert.equal(d.querySelector("script"), null);
   assert.equal(d.querySelectorAll('a[target="_blank"]').length, 1);
-  assert.equal(d.querySelector('a[href="#/report/8?v=2"]'), null);
+  assert.equal(d.querySelector('a[href="/report/8?v=2"]'), null);
   assert.equal(d.querySelector('a[href="https://example.com/report"]'), null);
   assert(!d.body.textContent.includes("Report context text"));
   assert(!d.body.textContent.includes("Environment text"));

@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
 import { readRecord } from "../src/runs";
 import {
   migrateRecord,
@@ -166,5 +167,56 @@ test("offline migration writes new R2 objects and guards all D1 updates atomical
   } finally {
     db.close();
     await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("schema migration initializes empty declarations and permanently blocks old positional uploads", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(
+      "CREATE TABLE verification_runs(id TEXT PRIMARY KEY,author_id TEXT,crate TEXT,version TEXT,tool_version_id TEXT,sha256 TEXT,size INTEGER,r2_key TEXT,created_at TEXT); CREATE TABLE maintenance(id INTEGER PRIMARY KEY); CREATE TABLE report_revisions(report_id INTEGER,revision_no INTEGER,PRIMARY KEY(report_id,revision_no));",
+    );
+    db.exec(
+      "INSERT INTO verification_runs VALUES('old','author','crate','1','tool','hash',1,'old-key','time');",
+    );
+    db.exec(
+      readFileSync(
+        new URL("../migrations/0007_dependency_reviews.sql", import.meta.url),
+        "utf8",
+      ),
+    );
+    assert.equal(
+      db.prepare("SELECT COUNT(*) n FROM run_dependencies").get()!.n,
+      0,
+    );
+    assert.equal(
+      db.prepare("SELECT COUNT(*) n FROM report_dependencies").get()!.n,
+      0,
+    );
+    assert.throws(
+      () =>
+        db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)"),
+      /10 columns/,
+    );
+    db.prepare(
+      "INSERT INTO verification_runs(id,author_id,crate,version,tool_version_id,sha256,size,r2_key,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+    ).run("new", "author", "crate", "1", "tool", "hash", 1, "new-key", "time");
+    assert.equal(
+      db
+        .prepare(
+          "SELECT snapshot_schema_version FROM verification_runs WHERE id='new'",
+        )
+        .get()!.snapshot_schema_version,
+      2,
+    );
+    assert.throws(
+      () =>
+        db.exec(
+          "UPDATE verification_runs SET snapshot_schema_version=1 WHERE id='new'",
+        ),
+      /CHECK/,
+    );
+  } finally {
+    db.close();
   }
 });

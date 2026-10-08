@@ -1,6 +1,6 @@
 (() => {
   const container = document.querySelector("#account-nav");
-  if (!container) return;
+  if (!container || container.dataset.serverRendered === "true") return;
   const showError = () => {
     let message = container.querySelector('[role="alert"]');
     if (!message) {
@@ -64,7 +64,7 @@
         showStarKarma,
       );
     } catch {
-      container.innerHTML = '<a href="/#/account">Account</a>';
+      container.innerHTML = '<a href="/account">Account</a>';
     }
   }
   void refresh();

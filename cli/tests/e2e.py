@@ -80,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
         assert not self.path.startswith('/api/v1/runs/'), 'Run registration must be one SARIF upload'
         if self.path == '/auth/device/code':
             assert body == {'client_id': 'proofs-cli', 'scope': 'publish'}
-            return self.reply(200, {'device_code': 'fixture-device', 'user_code': 'ABCD-EFGH', 'verification_uri': origin + '/#/device', 'expires_in': 60, 'interval': 1})
+            return self.reply(200, {'device_code': 'fixture-device', 'user_code': 'ABCD-EFGH', 'verification_uri': origin + '/device', 'expires_in': 60, 'interval': 1})
         if self.path == '/auth/device/token':
             polls += 1
             assert body['device_code'] == 'fixture-device'

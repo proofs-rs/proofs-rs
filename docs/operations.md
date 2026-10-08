@@ -183,3 +183,16 @@ tool, and exit status and per-contract results are validated from that same docu
 After deploying rustdoc format 60 support, retry a failed import by calling
 `POST /api/v1/publish/prepare` for the same crate/version. Failed jobs do not block
 a new preparation job; no database migration or manual job edit is required.
+
+
+### Dependency-review rollout automation
+
+Normal Production deployment requires the completed SARIF v2 rollout marker and
+no active migration write fences. Execute the dedicated **One-time dependency
+snapshot rollout** workflow first, by creating the same-repository
+`ops/dependency-review-migration` branch at the reviewed PR commit (or dispatching
+on main). This is an explicit operational branch; feature branch pushes do not
+run it. The migration deploys maintenance, drains old invocations, writes private
+D1/R2 backups, atomically migrates/validates evidence, and deploys the reviewed new
+Worker. Failure leaves maintenance rather than reverting to schema-v1 code.
+See [the full workflow and recovery procedure](dependency-migration.md).

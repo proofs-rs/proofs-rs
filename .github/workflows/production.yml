@@ -56,6 +56,8 @@ jobs:
           GITHUB_CLIENT_ID: ${{ vars.PRODUCTION_GITHUB_CLIENT_ID }}
           GITHUB_CLIENT_SECRET: ${{ secrets.PRODUCTION_GITHUB_CLIENT_SECRET }}
           ADMIN_GITHUB_IDS: ${{ vars.ADMIN_GITHUB_IDS }}
+      - name: Require completed dependency snapshot rollout
+        run: node scripts/dependency-rollout-gate.mjs wrangler.production.json
       - run: npx wrangler d1 migrations apply DB --remote --config wrangler.production.json
       - run: npx wrangler deploy --config wrangler.production.json
       - name: Refresh imported API catalogues

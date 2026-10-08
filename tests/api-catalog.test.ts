@@ -78,7 +78,7 @@ test("catalogue groups methods, links single implementations and aggregates fami
   );
   assert(d.querySelector("summary .unsafe"));
   assert.equal(d.querySelectorAll("details a").length, 2);
-  assert.equal(d.querySelector('a[href="#/api/clone"]')!.textContent, "clone");
+  assert.equal(d.querySelector('a[href="/api/clone"]')!.textContent, "clone");
   assert.match(d.body.textContent!, /impl core::clone::Clone for Thing/);
   assert.equal(d.querySelectorAll("aside, button").length, 0);
   assert.equal(
@@ -127,8 +127,8 @@ test("catalogue escapes names and preserves legacy links before metadata refresh
     ),
   ).window.document;
   assert.equal(d.querySelector("script"), null);
-  assert(d.querySelector('a[href="#/api/bad%22"]'));
-  assert.equal(d.querySelector('a[href="#/api/legacy"]')!.textContent, "m");
+  assert(d.querySelector('a[href="/api/bad%22"]'));
+  assert.equal(d.querySelector('a[href="/api/legacy"]')!.textContent, "m");
 });
 
 test("rustdoc metadata distinguishes receivers and qualifies external traits without changing keys", () => {

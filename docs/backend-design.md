@@ -288,7 +288,7 @@ no reference URL. These describe the tool version itself, separately from report
 shared limitations and claim-specific limitations. Empty text hides the section;
 it does not assert that the tool has no limitations.
 
-The public tool page links each version to `#/tool-version/{id}`. The version
+The public tool page links each version to `/tool-version/{id}`. The version
 page shows Known limitations, its update date, and a keyset-paginated list of
 public, non-withdrawn reports whose latest revision uses that exact version.
 Report and claim details link the tool/version and show a collapsed Tool
