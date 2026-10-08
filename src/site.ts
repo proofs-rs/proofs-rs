@@ -508,21 +508,36 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
           ? ["starred-reports", "starred-claims"]
           : []),
       ];
-      const requested = current.searchParams.get("section") || "reports";
-      if (!sections.includes(requested))
-        throw new Fault(400, "invalid_section");
-      const render =
-        requested === "comments"
-          ? (cm: any) =>
-              `<article><p><a href="/report/${cm.report_id}?v=${cm.revision_no}#comment-${enc(cm.id)}">Report #${cm.report_id} · v${cm.revision_no} · comment #${cm.sequence_no}</a> · ${date(cm.created_at)}</p><p class="preserve">${esc(cm.body)}</p></article>`
-          : requested === "starred-claims"
-            ? claimItem
-            : reportSummary;
+      const content = await Promise.all(
+        sections.map(async (section) => {
+          const render =
+            section === "comments"
+              ? (cm: any) =>
+                  `<article><p><a href="/report/${cm.report_id}?v=${cm.revision_no}#comment-${enc(cm.id)}">Report #${cm.report_id} · v${cm.revision_no} · comment #${cm.sequence_no}</a> · ${date(cm.created_at)}</p><p class="preserve">${esc(cm.body)}</p></article>`
+              : section === "starred-claims"
+                ? claimItem
+                : reportSummary;
+          const label =
+            section === "reports"
+              ? own
+                ? "My reports"
+                : "Reports"
+              : section === "comments"
+                ? own
+                  ? "My comments"
+                  : "Comments"
+                : section === "starred-reports"
+                  ? "Starred reports"
+                  : "Starred claims";
+          return `<section id="${section}"><h2>${label}</h2>${await list(prefix + "/" + section, render, section + "_cursor")}</section>`;
+        }),
+      );
       return result(
         u.username,
-        `<h1>${esc(u.username)}</h1><p>${config.show_star_karma ? `${u.karma} karma · ` : ""}joined ${date(u.created_at)}</p><p><a href="https://github.com/${enc(u.username)}">GitHub profile</a></p><nav aria-label="Activity">${sections.map((s) => `<a href="${current.pathname}?section=${s}"${s === requested ? ' aria-current="page"' : ""}>${esc(s.replaceAll("-", " "))}</a>`).join(" · ")}</nav><h2>${esc(requested.replaceAll("-", " "))}</h2>${await list(prefix + "/" + requested, render)}`,
+        `<h1>${esc(u.username)}</h1><p>${config.show_star_karma ? `${u.karma} karma · ` : ""}joined ${date(u.created_at)}</p><p><a href="https://github.com/${enc(u.username)}">GitHub profile</a></p>${content.join("")}`,
       );
     }
+
     if (p === "settings") {
       const [prefs, tokens] = await Promise.all([
         get("/me/notification-preferences"),

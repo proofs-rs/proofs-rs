@@ -3134,3 +3134,27 @@ test("optional staging pagination fixture is repeatable and provides two HTML pa
   assert.equal(new Set([...ids(first), ...ids(second)]).size, 36);
   assert.equal(second.window.document.querySelector('a[rel="next"]'), null);
 });
+
+test("My activity always shows report and comment sections without section navigation", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { env } = await fixture();
+  for (const path of ["/account", "/account?section=comments"]) {
+    const response = await app.request(
+      "https://example.test" + path,
+      { headers: { Cookie: "__Host-proofsr_session=alice" } },
+      env,
+    );
+    assert.equal(response.status, 200);
+    const document = new JSDOM(await response.text()).window.document;
+    assert.equal(
+      document.querySelector("#reports h2")?.textContent,
+      "My reports",
+    );
+    assert.equal(
+      document.querySelector("#comments h2")?.textContent,
+      "My comments",
+    );
+    assert.equal(document.querySelector('nav[aria-label="Activity"]'), null);
+    assert.equal(document.querySelector('main a[href*="section="]'), null);
+  }
+});
