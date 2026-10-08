@@ -169,6 +169,9 @@ export async function fixture(seedTools = true) {
       put: async () => {},
       get: async () => ({
         json: async () => recordedSarif("11111111-1111-4111-8111-111111111111"),
+        body: new Response(
+          JSON.stringify(recordedSarif("11111111-1111-4111-8111-111111111111")),
+        ).body,
       }),
     },
     ASSETS: { fetch: async () => new Response("assets") },
@@ -1237,479 +1240,6 @@ test("device login, one-time exchange, scope isolation, ownership and revocation
   );
 });
 
-test("frontend Book redirects, revision links and nested comment deletion", async () => {
-  const { JSDOM } = await import("jsdom");
-  const { transpileModule, ModuleKind, ScriptTarget } =
-    await import("typescript");
-  const { request } = await fixture();
-  const dom = new JSDOM(
-    readFileSync(new URL("../index.html", import.meta.url), "utf8"),
-    {
-      url: "https://example.test/#/publish?api=safe",
-      runScripts: "outside-only",
-    },
-  );
-  const w = dom.window;
-  let signedInUser = "alice";
-  w.fetch = async (path: any, init: any = {}) => {
-    const p = String(path).replace("/api/v1", "");
-    const result = await request(
-      p,
-      init.method || "GET",
-      init.body ? JSON.parse(init.body) : undefined,
-      signedInUser,
-      init.headers || {},
-    );
-    return new Response(JSON.stringify(result.body), {
-      status: result.status,
-      headers: { "Content-Type": "application/json" },
-    }) as any;
-  };
-  w.confirm = () => true;
-  const scrolled: string[] = [];
-  w.HTMLElement.prototype.scrollIntoView = function () {
-    scrolled.push(this.id);
-  };
-  const legal = readFileSync(
-    new URL("../web/legal.ts", import.meta.url),
-    "utf8",
-  ).replace("export const legal", "const legal");
-  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
-    .replace(
-      'import "../public/account-navigation.js";',
-      readFileSync(
-        new URL("../public/account-navigation.js", import.meta.url),
-        "utf8",
-      ),
-    )
-    .replace(
-      "location.replace(target)",
-      "document.body.dataset.bookRedirect = target",
-    )
-    .replace(/import \{ legal \} from "\.\/legal";/, "")
-    .replace(
-      'import { prop } from "./properties";',
-      readFileSync(
-        new URL("../web/properties.ts", import.meta.url),
-        "utf8",
-      ).replaceAll("export ", ""),
-    )
-    .replace(
-      /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
-      "const renderAPICatalog = (() => {" +
-        readFileSync(new URL("../web/api-catalog.ts", import.meta.url), "utf8")
-          .replaceAll("export ", "")
-          .replace(
-            'import { prop } from "./properties";',
-            readFileSync(
-              new URL("../web/properties.ts", import.meta.url),
-              "utf8",
-            ).replaceAll("export ", ""),
-          ) +
-        "; return renderAPICatalog; })();",
-    )
-    .replace(
-      /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
-      "const {reproduceSection,bindReproduce}=(()=>{" +
-        readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
-          .replaceAll("export function", "function")
-          .replace(
-            'import { prop } from "./properties";',
-            readFileSync(
-              new URL("../web/properties.ts", import.meta.url),
-              "utf8",
-            ).replaceAll("export ", ""),
-          ) +
-        ";return {reproduceSection,bindReproduce};})();",
-    );
-  w.eval(
-    transpileModule(
-      legal +
-        "\n" +
-        main +
-        ";window.setUIFlags=(stars,discussion)=>{config.show_star_karma=stars;config.show_home_discussion=discussion};",
-      {
-        compilerOptions: {
-          module: ModuleKind.None,
-          target: ScriptTarget.ES2022,
-        },
-      },
-    ).outputText,
-  );
-  async function until(selector: string) {
-    for (let n = 0; n < 100; n++) {
-      const el = w.document.querySelector(selector);
-      if (
-        el &&
-        w.document.querySelector("#app")?.getAttribute("aria-busy") !== "true"
-      )
-        return el;
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    throw Error(
-      "Missing " +
-        selector +
-        ": " +
-        w.document.querySelector("#app")?.textContent,
-    );
-  }
-  const input = (name: string, value: string) => {
-    (w.document.querySelector('[name="' + name + '"]') as any).value = value;
-  };
-  const submit = (selector: string) =>
-    (w.document.querySelector(selector) as any).dispatchEvent(
-      new w.Event("submit", { bubbles: true, cancelable: true }),
-    );
-  try {
-    await until('#app a[href="/book/publish-a-report.html"]');
-    assert.equal(
-      w.document.body.dataset.bookRedirect,
-      "/book/publish-a-report.html",
-    );
-    for (const selector of ["nav a", "footer a"]) {
-      for (const link of w.document.querySelectorAll(selector)) {
-        if (link.textContent === "About")
-          assert.equal(link.getAttribute("href"), "/book/");
-        if (link.textContent === "Publish")
-          assert.equal(
-            link.getAttribute("href"),
-            "/book/publish-a-report.html",
-          );
-      }
-    }
-    assert.equal(w.document.querySelector("#report-form"), null);
-    const made = await request("/reports", "POST", reportInput);
-    assert.equal(made.status, 201);
-    w.location.hash = "/report/1";
-    await until("#comment-form");
-    assert.equal(
-      w.document.querySelector('.report-actions a[href*="publish"]'),
-      null,
-    );
-    const claimLink = w.document
-      .querySelector('a[href^="#/claim/"]')!
-      .getAttribute("href")!;
-    w.location.hash = claimLink;
-    await until('.breadcrumbs a[href="#/report/1?v=1"]');
-    assert.equal(w.document.querySelector(".report-context"), null);
-    assert.match(w.document.querySelector("h1")!.textContent!, /^Claim #1 — /);
-    assert.equal(w.document.querySelector("#comment-form"), null);
-    assert.ok(w.document.querySelector('.title-row [data-star="claim"]'));
-    assert.match(
-      w.document.querySelector("#app")!.textContent!,
-      /No undefined behavior for sample::safe/,
-    );
-    assert.equal(
-      w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / reports / Report #1 v1 /",
-    );
-    assert.ok(
-      w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]'),
-    );
-    (w.document.querySelector('a[href="#/api/safe"]') as any).click();
-    await until("#claims");
-    assert.equal(
-      w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / APIs /",
-    );
-    (
-      w.document.querySelector('.breadcrumbs a[href$="&section=apis"]') as any
-    ).click();
-    await until("#apis .catalog-row");
-    assert.equal(w.location.hash, "#/crate/sample?version=1.0.0&section=apis");
-    assert.equal(scrolled.at(-1), "apis-heading");
-    assert.equal(w.document.activeElement?.id, "apis-heading");
-    assert.equal(w.document.querySelector("h1")!.textContent, "sample 1.0.0");
-    w.location.hash = "/report/1";
-    await until("#comment-form");
-    (
-      w.document.querySelector(
-        '.breadcrumbs a[href$="&section=reports"]',
-      ) as any
-    ).click();
-    await until("#crate-reports");
-    assert.equal(scrolled.at(-1), "reports-heading");
-    assert.equal(w.document.activeElement?.id, "reports-heading");
-    // Direct section URLs work on a fresh route too; unknown sections are ignored.
-    w.location.hash = "/crate/sample?version=1.0.0&section=unknown";
-    await until("#crate-reports");
-    assert.equal(w.document.querySelector('[role="alert"]'), null);
-    w.location.hash = "/report/1";
-    await until("#comment-form");
-    assert.equal(
-      w.document.querySelector('.report-actions a[href*="discussion"]'),
-      null,
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("#app")!.textContent!,
-      /(?:report|claim) stars/,
-    );
-    assert.equal(w.document.querySelector('[data-star="claim"]'), null);
-    assert.equal(
-      w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / reports /",
-    );
-    assert.ok(w.document.querySelector('.title-row [data-star="report"]'));
-    (
-      w.document.querySelector('.star-controls a[href$="/stars"]') as any
-    ).click();
-    await until("#stargazers");
-    assert.equal(w.document.querySelector("h1")!.textContent, "Stars");
-    w.location.hash = "/report/1";
-    await until("#comment-form");
-    input("body", "Root comment");
-    submit("#comment-form");
-    await until("[data-reply]");
-    (w.document.querySelector("[data-reply]") as any).click();
-    input("body", "Nested reply");
-    submit("#comment-form");
-    await until(".comment-children .comment");
-    assert.match(
-      w.document.querySelector(".comment-children .comment")!.textContent!,
-      /Nested reply/,
-    );
-    (w.document.querySelector("[data-delete]") as any).click();
-    await until(".comment-content em");
-    assert.equal(
-      w.document.querySelector(".comment-content em")!.textContent,
-      "deleted comment",
-    );
-    assert.match(
-      w.document.querySelector(".comment-children .comment")!.textContent!,
-      /Nested reply/,
-    );
-    w.location.hash = "/publish?update=1";
-    await until('#app a[href="/book/publish-a-report.html"]');
-    assert.equal(w.document.querySelector("#report-form"), null);
-    const existing = (await request("/reports/1")).body;
-    const revised = await request("/reports/1/revisions", "POST", {
-      ...reportInput,
-      title: "Revised through API",
-      expected_revision: 1,
-      claims: existing.claims,
-    });
-    assert.equal(revised.status, 201, JSON.stringify(revised.body));
-    w.location.hash = "/report/1";
-    await until("#comment-form");
-    assert.equal(
-      w.document.querySelector("h1")!.textContent,
-      "Report #1 — Revised through API",
-    );
-    assert.match(w.document.querySelector("#app")!.textContent!, /v2/);
-    // An old claim keeps its report revision in the parent breadcrumb.
-    w.location.hash = claimLink;
-    await until('.breadcrumbs a[href="#/report/1?v=1"]');
-    assert.equal(w.document.querySelector(".report-context"), null);
-    (
-      w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]') as any
-    ).click();
-    await until("#comment-form");
-    assert.match(
-      w.document.querySelector("#app")!.textContent!,
-      /Past revision/,
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("h1")!.textContent!,
-      /Revised through API/,
-    );
-    w.location.hash = "/account";
-    await until("#claims");
-    assert.equal(
-      w.document.querySelector('a[href="https://github.com/alice"]')
-        ?.textContent,
-      "GitHub profile",
-    );
-    assert.equal(w.document.querySelector("#bio"), null);
-    assert.match(
-      w.document.querySelector("#activity-comments")!.textContent!,
-      /Nested reply/,
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("#activity-comments")!.textContent!,
-      /deleted comment/,
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("#activity-comments")!.textContent!,
-      /Root comment/,
-    );
-    assert.match(
-      w.document.querySelector("#account-nav")!.textContent!,
-      /My activity/,
-    );
-    w.location.hash = "/settings?email=retry";
-    await until("#prefs");
-    assert.deepEqual(
-      Array.from(
-        w.document.querySelectorAll("#app h2"),
-        (el) => el.textContent,
-      ),
-      ["Account", "Email notifications", "Tokens", "Delete my account"],
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("#app")!.textContent!,
-      /Pending or uncertain deliveries/,
-    );
-    assert.match(
-      w.document.querySelector("#app")!.textContent!,
-      /GitHub email lookup failed/,
-    );
-    assert.match(
-      w.document.querySelector("#app")!.textContent!,
-      /For account deletion/,
-    );
-    w.location.hash = "/";
-    await until(".home-columns");
-    assert.deepEqual(
-      Array.from(
-        w.document.querySelectorAll(".home-columns > section > h2"),
-        (el) => el.textContent,
-      ),
-      ["Recent reports", "Latest discussion"],
-    );
-    assert.doesNotMatch(
-      w.document.querySelector("#app")!.textContent!,
-      /Recently updated crates/,
-    );
-    w.location.hash = "/crate/sample?version=1.0.0";
-    await until("#crate-reports .claim-item");
-    assert.match(
-      w.document.querySelector("#crate-reports")!.textContent!,
-      /Revised through API/,
-    );
-    w.location.hash = "/crates";
-    await until("#crate-rows tr");
-    assert.equal(
-      w.document.querySelector("#crate-count")!.textContent,
-      "1 crate total",
-    );
-    assert.deepEqual(
-      Array.from(
-        w.document.querySelectorAll(".crate-list th"),
-        (el) => el.textContent,
-      ),
-      ["Crate", "APIs", "Reports", "Claims", "Updated"],
-    );
-    assert.equal(
-      w.document.querySelector("#crate-rows tr td:nth-child(2)")!.textContent,
-      "2",
-    );
-    await request(
-      "/admin/action",
-      "POST",
-      {
-        action: "tool_version_limitations",
-        target: "kani-0.68.0",
-        limitations: "First line\n<script>not executable</script>",
-        reason: "UI check",
-      },
-      "admin",
-    );
-    w.location.hash = "/tool/kani";
-    const versionLink = await until('a[href="#/tool-version/kani-0.68.0"]');
-    (versionLink as any).click();
-    await until(".plain-text");
-    assert.equal(w.document.querySelector("h1")!.textContent, "Kani 0.68.0");
-    assert.equal(
-      w.document.querySelector(".plain-text")!.textContent,
-      "First line\n<script>not executable</script>",
-    );
-    assert.equal(w.document.querySelector("#app script"), null);
-    const reportLink = await until('#items a[href^="#/report/"]');
-    (reportLink as any).click();
-    const disclosure = await until("details.tool-limitations");
-    assert.equal(disclosure.hasAttribute("open"), false);
-    assert.match(disclosure.textContent!, /Updated/);
-    const limitationClaimLink = await until(
-      '#app a[href^="#/claim/"]:not([href$="/stars"])',
-    );
-    w.location.hash = limitationClaimLink.getAttribute("href")!;
-    await until(".signature");
-    await until("details.tool-limitations");
-    assert.equal(w.document.querySelector("#app script"), null);
-    assert.equal(w.eval('toolLimitations({tool_limitations:""})'), "");
-    // Both UI flags are independent; hidden reactions leave discussion information intact.
-    (w as any).setUIFlags(false, false);
-    await w.eval("refreshMe()");
-    assert.equal(
-      w.document.querySelector('#account-nav a[href="#/account"]')!.textContent,
-      "My activity",
-    );
-    w.location.hash = "/";
-    await until("#home-reports .claim-item");
-    assert.equal(w.document.querySelector("#home-discussion"), null);
-    assert.ok(w.document.querySelector(".home-single-column"));
-    assert.doesNotMatch(
-      w.document.querySelector("#home-reports")!.textContent!,
-      /stars|karma/,
-    );
-    assert.match(
-      w.document.querySelector("#home-reports")!.textContent!,
-      /\d+ comments/,
-    );
-    (w as any).setUIFlags(false, true);
-    await w.eval("route()");
-    assert.ok(w.document.querySelector("#home-discussion"));
-    assert.doesNotMatch(
-      w.document.querySelector("#home-reports")!.textContent!,
-      /stars|karma/,
-    );
-    (w as any).setUIFlags(true, false);
-    await w.eval("route()");
-    assert.equal(w.document.querySelector("#home-discussion"), null);
-    assert.match(
-      w.document.querySelector("#home-reports")!.textContent!,
-      /stars/,
-    );
-    (w as any).setUIFlags(false, false);
-    w.location.hash = "/report/1/stars";
-    await until("#discussion");
-    assert.equal(w.location.hash, "#/report/1");
-    assert.equal(w.document.querySelector(".star-controls"), null);
-    assert.doesNotMatch(
-      w.document.querySelector("#app")!.textContent!,
-      /karma/,
-    );
-    assert.match(
-      w.document.querySelector("#discussion h2")!.textContent!,
-      /Comments \(\d+\)/,
-    );
-    w.location.hash = claimLink.split("?")[0].slice(1) + "/stars";
-    await until(".signature");
-    assert.equal(w.location.hash, claimLink.split("?")[0]);
-    assert.equal(w.document.querySelector(".star-controls"), null);
-    w.location.hash = "/account";
-    await until("#activity-comments");
-    assert.equal(w.document.querySelector("#starred-reports"), null);
-    assert.equal(w.document.querySelector("#starred-claims"), null);
-    assert.doesNotMatch(
-      w.document.querySelector("#app")!.textContent!,
-      /stars|karma/,
-    );
-    signedInUser = "";
-    await w.eval("refreshMe()");
-    assert.equal(
-      w.document
-        .querySelector("#account-nav .signin > a")!
-        .getAttribute("href"),
-      "/auth/github",
-    );
-    assert.equal(w.document.querySelector(".signin-notice"), null);
-    w.location.hash = "/publish";
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    await until('#app a[href="/book/publish-a-report.html"]');
-    assert.equal(w.document.querySelector(".publish-guide"), null);
-    assert.equal(w.document.querySelector('a[href*="manual=1"]'), null);
-    w.location.hash = "/publish?manual=1";
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    await until('#app a[href="/book/publish-a-report.html"]');
-    assert.equal(w.document.querySelector("#report-form"), null);
-    assert.equal(w.document.querySelector("#prepare"), null);
-    assert.equal(w.document.querySelector('#app a[href="#/terms"]'), null);
-  } finally {
-    w.close();
-  }
-});
-
 test("moderation redacts shared and individual revision text and user erasure removes stars", async () => {
   const { request, db } = await fixture();
   const made = await request("/reports", "POST", reportInput);
@@ -1898,195 +1428,6 @@ test("import stores normalized crate description using the existing metadata req
   assert.equal(urls.length, 2);
 });
 
-test("static page content renders before requests, remains usable, and survives stale responses and failures", async () => {
-  const { JSDOM } = await import("jsdom");
-  const { transpileModule, ModuleKind, ScriptTarget } =
-    await import("typescript");
-  const dom = new JSDOM(
-    readFileSync(new URL("../index.html", import.meta.url), "utf8"),
-    { url: "https://example.test/#/", runScripts: "outside-only" },
-  );
-  const w = dom.window,
-    d = w.document;
-  const pending = new Map<string, (response: Response) => void>();
-  w.fetch = (path: any) =>
-    new Promise((resolve) => pending.set(String(path), resolve)) as any;
-  const finish = (path: string, body: any, status = 200) => {
-    const resolve = pending.get("/api/v1" + path);
-    assert.ok(resolve, "Request started: " + path);
-    pending.delete("/api/v1" + path);
-    resolve(new Response(JSON.stringify(body), { status }));
-  };
-  const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
-  const legal = readFileSync(
-    new URL("../web/legal.ts", import.meta.url),
-    "utf8",
-  ).replace("export const legal", "const legal");
-  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
-    .replace(
-      'import "../public/account-navigation.js";',
-      readFileSync(
-        new URL("../public/account-navigation.js", import.meta.url),
-        "utf8",
-      ),
-    )
-    .replace(
-      "location.replace(target)",
-      "document.body.dataset.bookRedirect = target",
-    )
-    .replace(/import \{ legal \} from "\.\/legal";/, "")
-    .replace(
-      'import { prop } from "./properties";',
-      readFileSync(
-        new URL("../web/properties.ts", import.meta.url),
-        "utf8",
-      ).replaceAll("export ", ""),
-    )
-    .replace(
-      /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
-      "const renderAPICatalog = (() => {" +
-        readFileSync(new URL("../web/api-catalog.ts", import.meta.url), "utf8")
-          .replaceAll("export ", "")
-          .replace(
-            'import { prop } from "./properties";',
-            readFileSync(
-              new URL("../web/properties.ts", import.meta.url),
-              "utf8",
-            ).replaceAll("export ", ""),
-          ) +
-        "; return renderAPICatalog; })();",
-    )
-    .replace(
-      /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
-      "const {reproduceSection,bindReproduce}=(()=>{" +
-        readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
-          .replaceAll("export function", "function")
-          .replace(
-            'import { prop } from "./properties";',
-            readFileSync(
-              new URL("../web/properties.ts", import.meta.url),
-              "utf8",
-            ).replaceAll("export ", ""),
-          ) +
-        ";return {reproduceSection,bindReproduce};})();",
-    );
-  try {
-    w.eval(
-      transpileModule(legal + "\n" + main, {
-        compilerOptions: {
-          module: ModuleKind.None,
-          target: ScriptTarget.ES2022,
-        },
-      }).outputText,
-    );
-    assert.equal(d.querySelector("h1")!.textContent, "proofs.rs");
-    assert.deepEqual(
-      Array.from(d.querySelectorAll(".home-columns h2"), (x) => x.textContent),
-      ["Recent reports"],
-    );
-    assert.equal((d.querySelector("#app") as any).inert, false);
-    const input = d.querySelector("#search input") as any;
-    input.value = "typed while loading";
-    finish("/config", { oauth_configured: true, terms_version: "test" });
-    finish("/home", { reports: [], discussion: [] });
-    await tick();
-    assert.equal(
-      (d.querySelector("#search input") as any).value,
-      "typed while loading",
-    );
-    assert.equal(
-      d.querySelector("#home-reports")!.textContent,
-      "No reports yet.",
-    );
-    assert.ok(!pending.has("/api/v1/config"));
-    assert.ok(pending.has("/api/v1/me"));
-    w.location.hash = "/publish";
-    await tick();
-    assert.ok(d.querySelector('#app a[href="/book/publish-a-report.html"]'));
-    assert.equal(d.body.dataset.bookRedirect, "/book/publish-a-report.html");
-    assert.equal(d.querySelector("[data-loading]"), null);
-    w.location.hash = "/tools";
-    await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "Verification tools");
-    assert.match(
-      d.querySelector("#app")!.textContent!,
-      /Request a tool or version/,
-    );
-    finish("/tools", { error: "tools_unavailable" }, 503);
-    await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "Verification tools");
-    assert.match(
-      d.querySelector('[role="alert"]')!.textContent!,
-      /tools_unavailable/,
-    );
-    assert.equal(d.querySelector("[data-loading]"), null);
-    w.location.hash = "/";
-    await tick();
-    const search = d.querySelector("#search")!;
-    (search.querySelector("input") as any).value = "sample";
-    search.dispatchEvent(
-      new w.Event("submit", { bubbles: true, cancelable: true }),
-    );
-    await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "Crates");
-    assert.equal((d.querySelector("#search input") as any).value, "sample");
-    finish("/home", { reports: [], discussion: [] });
-    await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "Crates");
-    w.location.hash = "/about";
-    await tick();
-    assert.equal(d.body.dataset.bookRedirect, "/book/");
-    assert.ok(d.querySelector('#app a[href="/book/"]'));
-    finish("/me", { user: null });
-    await tick();
-    assert.ok(d.querySelector('#account-nav a[href="/auth/github"]'));
-    assert.ok(d.querySelector('#app a[href="/book/"]'));
-    finish("/crates?q=sample&cursor=0", {
-      items: [],
-      total_count: 0,
-      matching_count: 0,
-      next_cursor: null,
-    });
-    await tick();
-    assert.ok(d.querySelector('#app a[href="/book/"]'));
-    for (const path of [
-      "/report/8",
-      "/claim/example",
-      "/tool/kani",
-      "/user/alice",
-      "/api/safe",
-    ]) {
-      w.location.hash = path;
-      await tick();
-      assert.equal(d.querySelector("#app h1"), null, path);
-      assert.ok(d.querySelector("[data-loading]"), path);
-    }
-    w.location.hash = "/signup";
-    await tick();
-    const resolveSignup = pending.get("/auth/signup")!;
-    assert.ok(resolveSignup);
-    resolveSignup(
-      Response.json({
-        username: "new-user",
-        csrf: "pending-csrf",
-        terms_version: "test",
-        return_to: "/#/publish",
-      }),
-    );
-    await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "Sign up");
-    assert.equal(d.querySelector("#signup")!.textContent, "Sign up");
-    assert.match(
-      d.querySelector("#app")!.textContent!,
-      /By signing up, you agree to the Terms and acknowledge the Privacy Policy/,
-    );
-    assert.equal(d.querySelector('input[type="checkbox"]'), null);
-    assert.ok(d.querySelector('a[href^="/auth/github?switch_account=1"]'));
-  } finally {
-    w.close();
-  }
-});
-
 test("public stargazers paginate without duplicates and respect target visibility", async () => {
   const { request, db } = await fixture();
   const id = (await request("/reports", "POST", reportInput)).body.id;
@@ -2189,8 +1530,7 @@ test("first GitHub login requires explicit signup; existing login bypasses it", 
       .join("; ");
   async function oauth() {
     const start = await call(
-      "/auth/github?return_to=" +
-        encodeURIComponent("/#/device?code=ABCD-EFGH"),
+      "/auth/github?return_to=" + encodeURIComponent("/device?code=ABCD-EFGH"),
       "",
     );
     const state = new URL(start.headers.get("location")!).searchParams.get(
@@ -2202,7 +1542,7 @@ test("first GitHub login requires explicit signup; existing login bypasses it", 
     );
   }
   const callback = await oauth();
-  assert.equal(callback.headers.get("location"), "/#/signup");
+  assert.equal(callback.headers.get("location"), "/signup");
   assert.equal(
     db.prepare("SELECT COUNT(*) n FROM users WHERE github_id=999").get()!.n,
     0,
@@ -2244,7 +1584,7 @@ test("first GitHub login requires explicit signup; existing login bypasses it", 
   assert.equal(signed.status, 200, await signed.clone().text());
   assert.equal(
     ((await signed.json()) as any).return_to,
-    "/#/device?code=ABCD-EFGH",
+    "/device?code=ABCD-EFGH",
   );
   assert.equal(
     db.prepare("SELECT COUNT(*) n FROM users WHERE github_id=999").get()!.n,
@@ -2261,7 +1601,7 @@ test("first GitHub login requires explicit signup; existing login bypasses it", 
   );
   githubID = 1;
   const existing = await oauth();
-  assert.equal(existing.headers.get("location"), "/#/device?code=ABCD-EFGH");
+  assert.equal(existing.headers.get("location"), "/device?code=ABCD-EFGH");
   assert.match(cookies(existing), /__Host-proofsr_session=/);
   // Abandoned registrations expire and cannot be confirmed.
   githubID = 1000;
@@ -3259,4 +2599,680 @@ test("UI visibility configuration defaults off and exposes independent flags wit
       assert.equal(body.show_star_karma, star);
       assert.equal(body.show_home_discussion, discussion);
     }
+});
+
+test("HTML pages render public content without JavaScript and preserve visibility and revisions", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env, request } = await fixture();
+  const made = await request("/reports", "POST", {
+    ...reportInput,
+    title: "SSR <script>report</script>",
+    explanation: "Visible report explanation",
+  });
+  assert.equal(made.status, 201);
+  const claim = db.prepare("SELECT id FROM claims WHERE report_id=1").get()!.id;
+  for (const [path, expected] of [
+    ["/", "Recent reports"],
+    ["/crates?q=sample", "sample"],
+    ["/crate/sample?version=1.0.0", "safe"],
+    ["/api/safe", "sample::safe"],
+    ["/reports", "SSR <script>report</script>"],
+    ["/report/1", "Visible report explanation"],
+    [`/claim/${claim}?report_revision=1`, "Preconditions"],
+    ["/tools", "Kani"],
+    ["/tool/kani", "0.68.0"],
+    ["/tool-version/kani-0.68.0", "SSR <script>report</script>"],
+    ["/user/alice", "SSR <script>report</script>"],
+    ["/account", "SSR <script>report</script>"],
+    ["/settings", "Email notifications"],
+  ]) {
+    const response = await app.request(
+      "https://example.test" + path,
+      { headers: { Cookie: "__Host-proofsr_session=alice" } },
+      env,
+    );
+    assert.equal(
+      response.status,
+      200,
+      path + ": " + (await response.clone().text()),
+    );
+    assert.match(response.headers.get("content-type")!, /text\/html/);
+    assert.ok(response.headers.get("cache-control")?.includes("no-store"));
+    const dom = new JSDOM(await response.text());
+    assert.ok(
+      dom.window.document
+        .querySelector("main")!
+        .textContent!.includes(expected),
+      path,
+    );
+    assert.equal(dom.window.document.querySelector("main script"), null);
+    assert.equal(
+      dom.window.document.querySelector('script[src*="main"]'),
+      null,
+    );
+    dom.window.close();
+  }
+  const response = await app.request("https://example.test/report/1", {}, env);
+  const html = await response.text();
+  assert.match(html, /Run locally/);
+  assert.match(html, /Recorded run/);
+  assert.match(html, /Diagnostics &amp; logs/);
+  assert.doesNotMatch(html, /Loading…|Loading recorded runs/);
+  for (const path of [
+    "/report/999",
+    "/report/1?v=999",
+    "/claim/missing",
+    "/api/missing",
+  ]) {
+    const r = await app.request("https://example.test" + path, {}, env);
+    assert.equal(r.status, 404, path);
+    assert.match(r.headers.get("content-type")!, /text\/html/);
+  }
+  const comment = await request("/reports/1/comments", "POST", {
+    body: "Linked comment",
+    revision_no: 1,
+  });
+  assert.equal(comment.status, 201);
+  const linked = await app.request(
+    "https://example.test/report/1?comment=" + comment.body.id,
+    {},
+    env,
+  );
+  assert.equal(linked.status, 302);
+  assert.equal(
+    linked.headers.get("location"),
+    "/report/1#comment-" + comment.body.id,
+  );
+  const section = await app.request(
+    "https://example.test/crate/sample?version=1.0.0&section=apis",
+    {},
+    env,
+  );
+  assert.equal(section.status, 302);
+  assert.equal(
+    section.headers.get("location"),
+    "/crate/sample?version=1.0.0#apis",
+  );
+  db.exec("UPDATE reports SET visibility='hidden' WHERE id=1");
+  for (const path of [
+    "/report/1",
+    `/claim/${claim}`,
+    "/runs/11111111-1111-4111-8111-111111111111?report=1",
+  ]) {
+    const r = await app.request("https://example.test" + path, {}, env);
+    assert.equal(r.status, 404, path);
+    assert.doesNotMatch(await r.text(), /Visible report explanation/);
+  }
+});
+
+test("HTML page links paginate growing lists and retain filters while bounded content is complete", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env, request } = await fixture();
+  for (let i = 0; i < 35; i++) {
+    db.exec("DELETE FROM rate_limits");
+    assert.equal(
+      (
+        await request("/reports", "POST", {
+          ...reportInput,
+          title: "Report " + i,
+        })
+      ).status,
+      201,
+    );
+  }
+  for (const path of [
+    "/reports",
+    "/crate/sample?version=1.0.0",
+    "/api/safe",
+    "/tool/kani",
+    "/tool-version/kani-0.68.0",
+    "/user/alice?section=reports",
+    "/account?section=reports",
+  ]) {
+    const read = async (url: string) =>
+      new JSDOM(
+        await (
+          await app.request(
+            url,
+            { headers: { Cookie: "__Host-proofsr_session=alice" } },
+            env,
+          )
+        ).text(),
+      );
+    const first = await read("https://example.test" + path);
+    const next = first.window.document
+      .querySelector('a[rel="next"]')!
+      .getAttribute("href")!;
+    assert.ok(next, path);
+    const nextURL = new URL(next, "https://example.test");
+    for (const [key, value] of new URL(path, "https://example.test")
+      .searchParams)
+      assert.equal(nextURL.searchParams.get(key), value);
+    const second = await read(nextURL.href);
+    assert.equal(
+      second.window.document.querySelector('a[rel="next"]'),
+      null,
+      path,
+    );
+    const selector = path.startsWith("/api/")
+      ? 'main .claim-item a[href^="/claim/"]'
+      : 'main .claim-item a[href^="/report/"]';
+    const links = (dom: any) =>
+      Array.from(dom.window.document.querySelectorAll(selector)).map((a: any) =>
+        a.getAttribute("href"),
+      );
+    assert.equal(links(first).length, 30, path);
+    assert.equal(links(second).length, 5, path);
+    assert.equal(new Set([...links(first), ...links(second)]).size, 35, path);
+    first.window.close();
+    second.window.close();
+  }
+  // More than one API page of revisions and a deep reply chain must still appear in initial HTML.
+  for (let revision = 2; revision <= 36; revision++)
+    db.prepare(
+      "INSERT INTO report_revisions SELECT report_id,?,title,explanation,trusted_assumptions,tool_version_id,environment,evidence_url,limitations,created_at FROM report_revisions WHERE report_id=1 AND revision_no=1",
+    ).run(revision);
+  const time = new Date().toISOString();
+  for (let n = 1; n <= 36; n++)
+    db.prepare(
+      "INSERT INTO report_comments(id,report_id,sequence_no,revision_no,author_id,reply_to_id,body,created_at) VALUES(?,1,?,1,'alice',?,?,?)",
+    ).run(
+      "ssr-comment-" + n,
+      n,
+      n === 1 ? null : "ssr-comment-" + (n - 1),
+      "Reply body " + n,
+      time,
+    );
+  db.exec(
+    "UPDATE report_comments SET visibility='hidden' WHERE id='ssr-comment-4'; UPDATE report_comments SET deleted_at=created_at WHERE id='ssr-comment-5'",
+  );
+  const page = new JSDOM(
+    await (
+      await app.request("https://example.test/report/1?v=1", {}, env)
+    ).text(),
+  );
+  assert.equal(
+    page.window.document.querySelectorAll("#revision-history a").length,
+    36,
+  );
+  assert.equal(page.window.document.querySelectorAll(".comment").length, 36);
+  assert.match(
+    page.window.document.querySelector("#discussion")!.textContent!,
+    /Reply body 36/,
+  );
+  assert.doesNotMatch(
+    page.window.document.querySelector("#discussion")!.textContent!,
+    /Reply body [45](?!\d)/,
+  );
+  assert.equal(page.window.document.querySelector('a[rel="next"]'), null);
+  page.window.close();
+});
+
+test("ordinary HTML forms preserve API CSRF, origin, ownership, idempotency and session guards", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env, request } = await fixture();
+  assert.equal((await request("/reports", "POST", reportInput)).status, 201);
+  const send = async (
+    action: string,
+    fields: Record<string, string>,
+    user = "alice",
+    origin = env.APP_ORIGIN,
+  ) =>
+    app.request(
+      "https://example.test/_actions/" + action,
+      {
+        method: "POST",
+        headers: {
+          Cookie: "__Host-proofsr_session=" + user,
+          Origin: origin,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(fields),
+      },
+      env,
+    );
+  const read = await app.request(
+    "https://example.test/report/1",
+    { headers: { Cookie: "__Host-proofsr_session=alice" } },
+    env,
+  );
+  const dom = new JSDOM(await read.text());
+  const form =
+    dom.window.document.querySelector<HTMLFormElement>("#comment-form")!;
+  const fields = Object.fromEntries(
+    Array.from(
+      form.querySelectorAll<HTMLInputElement>('input[type="hidden"]'),
+    ).map((input) => [input.name, input.value]),
+  );
+  fields.body = "Posted without JS <script>alert(1)</script>";
+  fields.revision_no = "1";
+  assert.equal(
+    (await send("comment", { ...fields, _csrf: "wrong" })).status,
+    403,
+  );
+  assert.equal(
+    (await send("comment", fields, "alice", "https://evil.test")).status,
+    403,
+  );
+  assert.equal((await send("comment", fields, "missing")).status, 401);
+  const posted = await send("comment", fields);
+  assert.equal(posted.status, 303, await posted.clone().text());
+  assert.equal(posted.headers.get("location"), "/report/1?v=1#discussion");
+  assert.equal((await send("comment", fields)).status, 303);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM report_comments").get()!.n,
+    1,
+  );
+  const cm = db.prepare("SELECT * FROM report_comments").get()!;
+  const edited = {
+    _csrf: "csrf",
+    _back: "/report/1",
+    id: String(cm.id),
+    edit_version: String(cm.edit_version),
+    body: "Edited without JS",
+  };
+  assert.equal((await send("edit-comment", edited, "bob")).status, 403);
+  assert.equal((await send("edit-comment", edited)).status, 303);
+  assert.equal(
+    db.prepare("SELECT body FROM report_comments").get()!.body,
+    "Edited without JS",
+  );
+  assert.equal(
+    (await send("preferences", { _csrf: "csrf", replies: "on" })).status,
+    303,
+  );
+  assert.equal(
+    db
+      .prepare(
+        "SELECT replies FROM notification_preferences WHERE user_id='alice'",
+      )
+      .get()!.replies,
+    1,
+  );
+  const star = await send("star", {
+    _csrf: "csrf",
+    _back: "//evil.test",
+    kind: "report",
+    id: "1",
+    on: "true",
+  });
+  assert.equal(star.status, 303);
+  assert.equal(star.headers.get("location"), "/");
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM report_stars").get()!.n, 1);
+  const logout = await send("logout", { _csrf: "csrf" });
+  assert.equal(logout.status, 303);
+  assert.match(logout.headers.get("set-cookie")!, /proofsr_session=/);
+  dom.window.close();
+});
+
+test("HTML includes all crate versions, API items, report claims, tool versions and tokens beyond page size", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env, request } = await fixture();
+  const time = new Date().toISOString();
+  for (let i = 0; i < 36; i++) {
+    const id = "bounded-api-" + i;
+    db.prepare(
+      "INSERT INTO api_items(id,release_id,canonical_key,display_path,kind,is_unsafe,signature,upstream_url) VALUES(?,1,?,?,'function',0,'pub fn verify()','https://docs.rs')",
+    ).run(id, id, "sample::verify_" + i);
+    db.prepare(
+      "INSERT INTO tool_versions(id,tool_id,version,selectable) VALUES(?,'kani',?,1)",
+    ).run("bounded-tool-" + i, "1.0." + i);
+    db.prepare(
+      "INSERT INTO api_tokens(id,user_id,token_hash,scope,created_at,expires_at) VALUES(?,'alice',?,'publish',?,?)",
+    ).run(
+      "bounded-token-" + i,
+      "token-hash-" + i,
+      time,
+      new Date(Date.now() + 86400000).toISOString(),
+    );
+  }
+  assert.equal((await request("/reports", "POST", reportInput)).status, 201);
+  for (let i = 0; i < 36; i++) {
+    const id = "bounded-claim-" + i;
+    db.prepare(
+      "INSERT INTO claims(id,report_id,api_item_id,property,created_at) VALUES(?,1,?,'no_ub',?)",
+    ).run(id, "bounded-api-" + i, time);
+    db.prepare(
+      "INSERT INTO claim_revisions SELECT ?,report_id,report_revision,?,title,precondition,explanation,trusted_assumptions,evidence_url,limitations FROM claim_revisions WHERE report_id=1 AND position=0",
+    ).run(id, i + 1);
+  }
+  for (let i = 0; i < 36; i++) {
+    const release = i + 2;
+    db.prepare(
+      "INSERT INTO releases(id,crate_id,version,checksum,yanked,created_at) VALUES(?,1,?,'checksum',0,?)",
+    ).run(release, "1.0." + (i + 1), time);
+    db.prepare(
+      "INSERT INTO reports(id,release_id,author_id,visibility,withdrawn_at,created_at,updated_at,create_key) SELECT ?,?,author_id,visibility,withdrawn_at,created_at,updated_at,? FROM reports WHERE id=1",
+    ).run(i + 2, release, "bounded-report-" + i);
+    db.prepare(
+      "INSERT INTO report_revisions SELECT ?,revision_no,title,explanation,trusted_assumptions,tool_version_id,environment,evidence_url,limitations,created_at FROM report_revisions WHERE report_id=1",
+    ).run(i + 2);
+  }
+  const read = async (path: string) =>
+    new JSDOM(
+      await (
+        await app.request(
+          "https://example.test" + path,
+          { headers: { Cookie: "__Host-proofsr_session=alice" } },
+          env,
+        )
+      ).text(),
+    );
+  const crate = await read("/crate/sample?version=1.0.0");
+  assert.equal(
+    crate.window.document.querySelectorAll('select[name="version"] option')
+      .length,
+    37,
+  );
+  assert.equal(
+    crate.window.document.querySelectorAll('a[href^="/api/bounded-api-"]')
+      .length,
+    36,
+  );
+  const report = await read("/report/1");
+  assert.equal(
+    report.window.document.querySelectorAll(
+      '.report-api-claims a[href^="/claim/bounded-claim-"]',
+    ).length,
+    36,
+  );
+  const tool = await read("/tool/kani");
+  assert.equal(
+    tool.window.document.querySelectorAll('a[href^="/tool-version/"]').length,
+    37,
+  );
+  const settings = await read("/settings");
+  assert.equal(
+    settings.window.document.querySelectorAll(
+      'form[action="/settings"] input[name="revoke"]',
+    ).length,
+    36,
+  );
+  for (const dom of [crate, report, tool, settings]) dom.window.close();
+});
+
+test("signup and CLI approval complete through HTML forms and return session cookies", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env } = await fixture();
+  const origin = env.APP_ORIGIN;
+  const time = new Date().toISOString();
+  db.prepare("INSERT INTO pending_signups VALUES(?,?,?,?,?,?)").run(
+    await hash("pending-html"),
+    JSON.stringify({
+      user: { id: 999, login: "html-user" },
+      email: { email: "html@example.test", verified: true, primary: true },
+      emailsOK: true,
+    }),
+    "signup-csrf",
+    "/book/concepts",
+    time,
+    new Date(Date.now() + 600000).toISOString(),
+  );
+  const signup = await app.request(
+    origin + "/signup",
+    { headers: { Cookie: "__Host-proofsr_signup=pending-html" } },
+    env,
+  );
+  assert.equal(signup.status, 200);
+  const dom = new JSDOM(await signup.text());
+  assert.equal(
+    dom.window.document
+      .querySelector('form[action="/_actions/signup"] input[name="_csrf"]')!
+      .getAttribute("value"),
+    "signup-csrf",
+  );
+  const completed = await app.request(
+    origin + "/_actions/signup",
+    {
+      method: "POST",
+      headers: {
+        Origin: origin,
+        Cookie: "__Host-proofsr_signup=pending-html",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        _csrf: "signup-csrf",
+        terms_version: "test",
+      }),
+    },
+    env,
+  );
+  assert.equal(completed.status, 303, await completed.clone().text());
+  assert.equal(completed.headers.get("location"), "/book/concepts");
+  assert.match(completed.headers.get("set-cookie")!, /__Host-proofsr_session=/);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM pending_signups").get()!.n,
+    0,
+  );
+  const codeResponse = await app.request(
+    origin + "/auth/device/code",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: "proofs-cli", scope: "publish" }),
+    },
+    env,
+  );
+  const code: any = await codeResponse.json();
+  assert.equal(codeResponse.status, 200);
+  const inspect = await app.request(
+    origin + "/device?code=" + encodeURIComponent(code.user_code),
+    { headers: { Cookie: "__Host-proofsr_session=alice" } },
+    env,
+  );
+  assert.equal(inspect.status, 200, await inspect.clone().text());
+  assert.match(await inspect.text(), /Authorize/);
+  const approved = await app.request(
+    origin + "/_actions/device",
+    {
+      method: "POST",
+      headers: {
+        Origin: origin,
+        Cookie: "__Host-proofsr_session=alice",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ _csrf: "csrf", user_code: code.user_code }),
+    },
+    env,
+  );
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.match(await approved.text(), /CLI connected/);
+  assert.equal(
+    db.prepare("SELECT state FROM device_authorizations").get()!.state,
+    "approved",
+  );
+  dom.window.close();
+});
+
+test("optional staging pagination fixture is repeatable and provides two HTML pages", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { db, env } = await fixture();
+  for (const name of [
+    "staging-demo",
+    "staging-pagination",
+    "staging-pagination",
+  ]) {
+    db.exec(
+      readFileSync(new URL(`../fixtures/${name}.sql`, import.meta.url), "utf8"),
+    );
+  }
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) n FROM reports WHERE create_key LIKE 'staging-pagination-v1-%'",
+      )
+      .get()!.n,
+    36,
+  );
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  const first = new JSDOM(
+    await (
+      await app.request(
+        "https://example.test/crate/pagination-demo?version=1.0.0-demo.1",
+        {},
+        env,
+      )
+    ).text(),
+  );
+  const next = first.window.document
+    .querySelector('a[rel="next"]')!
+    .getAttribute("href")!;
+  assert.ok(next);
+  const second = new JSDOM(
+    await (
+      await app.request(new URL(next, "https://example.test").href, {}, env)
+    ).text(),
+  );
+  const ids = (dom: any) =>
+    [
+      ...dom.window.document.querySelectorAll(
+        'main .claim-item a[href^="/report/"]',
+      ),
+    ].map((a: any) => a.getAttribute("href"));
+  assert.equal(ids(first).length, 30);
+  assert.equal(ids(second).length, 6);
+  assert.equal(new Set([...ids(first), ...ids(second)]).size, 36);
+  assert.equal(second.window.document.querySelector('a[rel="next"]'), null);
+});
+
+test("My activity always shows report and comment sections without section navigation", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { env } = await fixture();
+  for (const path of ["/account", "/account?section=comments"]) {
+    const response = await app.request(
+      "https://example.test" + path,
+      { headers: { Cookie: "__Host-proofsr_session=alice" } },
+      env,
+    );
+    assert.equal(response.status, 200);
+    const document = new JSDOM(await response.text()).window.document;
+    assert.equal(
+      document.querySelector("#reports h2")?.textContent,
+      "My reports",
+    );
+    assert.equal(
+      document.querySelector("#comments h2")?.textContent,
+      "My comments",
+    );
+    assert.equal(document.querySelector('nav[aria-label="Activity"]'), null);
+    assert.equal(document.querySelector('main a[href*="section="]'), null);
+  }
+});
+
+test("SSR retains the original controls, comment editor placement and inline logs", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { env, request, db } = await fixture();
+  env.SHOW_STAR_KARMA = "false";
+  await request("/reports", "POST", reportInput);
+  const comment = await request("/reports/1/comments", "POST", {
+    body: "Original comment",
+    revision_no: 1,
+  });
+  const id = comment.body.id;
+  const read = async (path: string, signedIn = true) => {
+    const response = await app.request(
+      env.APP_ORIGIN + path,
+      signedIn ? { headers: { Cookie: "__Host-proofsr_session=alice" } } : {},
+      env,
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+    return new JSDOM(await response.text()).window.document;
+  };
+  const crate = await read("/crate/sample?version=1.0.0");
+  assert.equal(
+    crate.querySelector('select[name="version"]')?.querySelectorAll("option")
+      .length,
+    1,
+  );
+  assert.equal(crate.querySelector("#reports")?.textContent, "Reports (1)");
+  assert.equal(
+    crate
+      .querySelector('a[href^="https://crates.io/"]')
+      ?.getAttribute("target"),
+    "_blank",
+  );
+  const crates = await read("/crates");
+  assert.equal(crates.querySelectorAll("td.numeric").length, 3);
+  assert.match(
+    crates.querySelector("time")!.textContent!,
+    /^\d{4}-\d{2}-\d{2}$/,
+  );
+  assert.ok(crates.querySelector("th[title]"));
+  const report = await read("/report/1");
+  assert.equal(report.querySelectorAll(".vote button").length, 2);
+  assert.equal(
+    report
+      .querySelector('button[aria-label="Upvote"]')
+      ?.getAttribute("aria-pressed"),
+    "false",
+  );
+  assert.match(
+    report.querySelector(".run-log-content")!.textContent!,
+    /SUCCESS/,
+  );
+  assert.equal(report.querySelectorAll('a[href^="/runs/"]').length, 0);
+  assert.equal(
+    report.querySelector(".report-actions button")?.textContent,
+    "Withdraw report",
+  );
+  assert.equal(report.querySelector("dialog"), null);
+  const edited = await read(`/report/1?edit=${id}`);
+  assert.ok(
+    edited.querySelector(
+      '.comment .editor form[action="/_actions/edit-comment"]',
+    ),
+  );
+  assert.ok(edited.querySelector('form[action="/_actions/comment"]'));
+  assert.equal(
+    edited.querySelector(".editor textarea")?.textContent,
+    "Original comment",
+  );
+  const confirmDelete = await read(`/report/1?delete=${id}`);
+  assert.ok(
+    confirmDelete.querySelector(
+      'dialog form[action="/_actions/delete-comment"]',
+    ),
+  );
+  const confirmWithdraw = await read("/report/1?withdraw=1");
+  assert.ok(
+    confirmWithdraw.querySelector('dialog form[action="/_actions/withdraw"]'),
+  );
+  assert.equal(
+    db.prepare("SELECT withdrawn_at FROM reports WHERE id=1").get()!
+      .withdrawn_at,
+    null,
+  );
+  const loggedOut = await read("/report/1", false);
+  assert.equal(
+    loggedOut.querySelectorAll('.vote input[name="sign_in"]').length,
+    2,
+  );
+  const home = await read("/");
+  assert.equal(home.querySelector('main a[href="/reports"]'), null);
+  db.prepare(
+    "INSERT INTO api_tokens(id,user_id,token_hash,scope,created_at,expires_at) VALUES('restore-token','alice','restore-hash','publish',?,?)",
+  ).run(
+    new Date().toISOString(),
+    new Date(Date.now() + 86400000).toISOString(),
+  );
+  const settings = await read("/settings");
+  assert.ok(
+    settings.querySelector('td form[action="/settings"] input[name="revoke"]'),
+  );
+  assert.equal(settings.querySelector("td details"), null);
+  const revoke = await read("/settings?revoke=restore-token");
+  assert.ok(
+    revoke.querySelector('#revoke-confirm form[action="/_actions/revoke"]'),
+  );
+  assert.equal(
+    db
+      .prepare("SELECT COUNT(*) n FROM api_tokens WHERE id='restore-token'")
+      .get()!.n,
+    1,
+  );
+  assert.equal(
+    settings.querySelectorAll('form[action="/_actions/preferences"] p label')
+      .length,
+    2,
+  );
 });

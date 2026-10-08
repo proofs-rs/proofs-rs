@@ -98,9 +98,9 @@ deviceRoutes.post(
     return c.json({
       device_code: secret,
       user_code,
-      verification_uri: c.env.APP_ORIGIN + "/#/device",
+      verification_uri: c.env.APP_ORIGIN + "/device",
       verification_uri_complete:
-        c.env.APP_ORIGIN + "/#/device?code=" + user_code,
+        c.env.APP_ORIGIN + "/device?code=" + user_code,
       expires_in: 600,
       interval: 5,
     });

@@ -107,7 +107,7 @@ api.get(
   (c) =>
     c.json({
       version: c.env.TERMS_VERSION,
-      url: "/#/terms",
+      url: "/terms",
       summary:
         "Report publication, permanent claim links, independent stars and report discussions.",
       requires_agreement:
@@ -972,6 +972,22 @@ for (const kind of ["report", "claim"] as const) {
   );
 }
 const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM report_comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM report_comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM report_comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM report_comments cm LEFT JOIN users u ON u.id=cm.author_id`;
+// HTML pages show the complete discussion, while the JSON API keeps keyset paging.
+export async function reportDiscussion(
+  db: D1Database,
+  reportID: number,
+  userID = "",
+) {
+  return (
+    await rows(
+      db,
+      commentSelect +
+        " WHERE cm.report_id=? AND EXISTS(SELECT 1 FROM reports p WHERE p.id=cm.report_id AND p.visibility='public') ORDER BY cm.sequence_no",
+      userID,
+      reportID,
+    )
+  ).map(publicComment);
+}
 api.get(
   "/reports/:id/comments",
   ...operation("List report comments or replies", S.list(S.comment), {

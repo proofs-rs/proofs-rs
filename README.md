@@ -10,6 +10,21 @@ Requires Node 24 and mdBook 0.4.45 (`cargo install mdbook --version 0.4.45 --loc
 
 `npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, independent report/claim stars, comment votes, outbox events and delivery states. A keyset cursor is used for lists. The tool catalogue starts empty. Tools and versions are stored in D1 and can be added or updated through the audited admin API without a deployment.
 
+## HTML pages
+
+The Worker renders page content on the server (`src/site.ts` and `src/site-views.ts`).
+Links and GET searches navigate normally; writes use POST forms backed by the existing
+API validation, permissions, CSRF and idempotency checks. The only app JavaScript
+is a compatibility redirect for previously shared hash URLs. Personalized HTML is
+not cached. The JSON API and CLI protocol retain their existing responses.
+
+Crate searches, report lists, API claim lists, activity lists and stargazers use
+keyset pagination links. Crate versions and API catalogues, report claims, complete
+comment/reply trees and revision history, tool/version catalogues and active tokens
+are included in the initial HTML. Home shows the latest 12 entries. Recorded run
+summaries and reproduction commands are rendered with the report; complete logs
+have a separate HTML page and remain available in the SARIF download.
+
 ## Book
 
 The mdBook sources live in `book/src/`, with chapter order in `SUMMARY.md`.

@@ -246,7 +246,7 @@ fn complete(api: &Api, state: &mut State, path: &Path) -> Result<()> {
     state.pending = None;
     state::write(path, state)?;
     println!(
-        "Published report #{id}, revision {revision}: {}/#/report/{id}",
+        "Published report #{id}, revision {revision}: {}/report/{id}",
         api.server
     );
     Ok(())

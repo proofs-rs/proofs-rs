@@ -20,7 +20,8 @@
     onError,
     showStarKarma = false,
   ) => {
-    const link = (path, label) => `<a href="${siteRoot}#/${path}">${label}</a>`;
+    const link = (path, label) =>
+      `<a href="${siteRoot.replace(/\/$/, "")}/${path}">${label}</a>`;
     container.innerHTML = me.user
       ? `<details><summary>${escapeHTML(me.user.username)}</summary><div class="profile-menu">${
           link(
