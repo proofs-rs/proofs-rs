@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write a proofs.rs report"
+  short_description: "Explain API guarantees and remaining risks"
+  default_prompt: "Use $write-proofs-report to draft a proofs.rs report from this crate and its verification evidence."

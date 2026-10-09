@@ -4,5 +4,6 @@
 - [Introduction](introduction.md)
 - [Concepts](concepts.md)
 - [Publish a report](publish-a-report.md)
+  - [Write a useful report](write-a-report.md)
 - [Review a dependency](review-a-dependency.md)
 - [API documentation](api-documentation.md)

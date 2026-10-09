@@ -24,6 +24,9 @@ Discovers `#[kani::proof_for_contract(...)]` harnesses and creates No UB and Pan
 
 Edit `proofs.toml` to set the report title and check the tool version used for verification. You can also add an explanation, assumptions, limitations, and environment.
 
+For help explaining what crate users can rely on, see [Write a useful report](write-a-report.md).
+It includes a report-writing skill you can give your AI agent.
+
 <details>
 <summary>Example proofs.toml</summary>
 
