@@ -74,7 +74,12 @@ if (identity?.id) {
   const tokenPath = userToken
     ? "/user/tokens/"
     : `/accounts/${encodeURIComponent(account)}/tokens/`;
-  const details = await api(tokenPath + encodeURIComponent(identity.id), true);
+  let details = await api(tokenPath + encodeURIComponent(identity.id), true);
+  if (!details && userToken)
+    details = await api(
+      `/accounts/${encodeURIComponent(account)}/tokens/${encodeURIComponent(identity.id)}`,
+      true,
+    );
   report.token_policy_readable = Boolean(details?.policies);
   if (details?.policies)
     report.token_policies = details.policies.map((policy) => ({
