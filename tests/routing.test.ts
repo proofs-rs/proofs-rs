@@ -75,3 +75,25 @@ test("static assets, Book and JSON API do not enter HTML routing", async () => {
   assert.match(await legal.text(), /<h1>Terms/);
   assert.equal(fetched.length, count);
 });
+
+test("SEO routes bypass HTML, authentication and static asset routing", async () => {
+  const env = {
+    ENVIRONMENT: "production",
+    APP_ORIGIN: "https://proofs.rs",
+    ASSETS: { fetch: async () => { throw new Error("Unexpected asset request"); } },
+  } as unknown as Env;
+  for (const [path, contentType] of [
+    ["/robots.txt", "text/plain; charset=utf-8"],
+    ["/sitemaps/pages.xml", "application/xml; charset=utf-8"],
+  ]) {
+    const response = await app.request("https://proofs.rs" + path, {}, env);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), contentType);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.equal(response.headers.get("X-Robots-Tag"), null);
+    assert.ok((await response.text()).includes("https://proofs.rs"));
+    const head = await app.request("https://proofs.rs" + path, { method: "HEAD" }, env);
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), "");
+  }
+});

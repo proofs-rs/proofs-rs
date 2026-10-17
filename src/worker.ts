@@ -1,3 +1,4 @@
+import { seoResponse } from "./seo";
 import { isSitePage, sitePage, siteAction, bookPage } from "./site";
 import { generateSpecs } from "hono-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
@@ -41,6 +42,14 @@ app.use("*", async (c, next) =>
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
   })(c, next),
 );
+// Sitemap and robots responses do not authenticate visitors or set cookies.
+app.use("*", async (c, next) => {
+  if (["GET", "HEAD"].includes(c.req.method)) {
+    const response = await seoResponse(c.env, c.req.path);
+    if (response) return response;
+  }
+  await next();
+});
 // Documentation is public and independent of cookies, tokens and database access.
 app.get("/openapi.json", async (c) =>
   c.json(
