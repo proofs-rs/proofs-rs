@@ -239,7 +239,7 @@ else:
     if extra.exists():
         for formal in json.loads(extra.read_text()): print('proofs.rs:formal:' + json.dumps(formal))
         sys.exit(0)
-    print('proofs.rs:formal:' + json.dumps({'version':1,'theorem':'fixture.f_spec',
+    print('proofs.rs:formal:' + json.dumps({'version':2 if os.getenv('TEST_WIRE_MISMATCH') else 1,'theorem':'fixture.f_spec',
         'module':'Proofs','statement':'True','binders':[],'conclusion':'True',
         'program':None,'program_head':None,'axioms':[],'first_line':2,'last_line':2,
         'definitions':[],'definitions_truncated':False,'translation_rerun':False}))
@@ -250,10 +250,22 @@ else:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
+    last_latest = None
+
     def cli(*args, ok=True, case=None):
+        global last_latest
         output = subprocess.run([binary, 'proofs', '--server', origin, *args], cwd=work, env=env, input='', capture_output=True, text=True, timeout=30)
         assert (output.returncode == 0) == ok, (args, output.stdout, output.stderr)
         if args[0] == 'run':
+            if output.returncode == 0:
+                saved = __import__('re').search(r'Saved run [^:]+: (.+)', output.stdout)
+                latest = Path(saved[1]).parent.parent / 'latest.json'
+                last_latest = (latest, latest.read_bytes())
+            elif last_latest:
+                assert last_latest[0].read_bytes() == last_latest[1], 'Rejected run changed latest'
+                assert 'Saved run ' not in output.stdout
+            if not ok and case != 'failed-recording-contract':
+                assert 'Server-side changes are required' not in output.stderr
             capture.run(output.stdout + output.stderr, output.returncode == 0, case)
         return output.stdout + output.stderr
 
@@ -398,14 +410,18 @@ else:
         env['TEST_LAKE_FAIL'] = '1'
         assert 'Lake build failed' in cli('run', '--', 'lake', 'build', ok=False, case='failed-aeneas-build')
         assert_snapshot_cleaned()
-        assert 'did not produce publishable' in cli('publish', ok=False)
         del env['TEST_LAKE_FAIL']
         env['TEST_LEAN_FAIL'] = '1'
         assert 'sorryAx' in cli('run', '--', 'lake', 'build', ok=False, case='failed-aeneas-audit')
         assert_snapshot_cleaned()
-        assert 'did not produce publishable' in cli('publish', ok=False)
         del env['TEST_LEAN_FAIL']
         cli('run', '--', 'lake', 'build', case='aeneas-manual')
+        assert_snapshot_cleaned()
+        env['TEST_WIRE_MISMATCH'] = '1'
+        mismatch = cli('run', '--', 'lake', 'build', ok=False, case='failed-recording-contract')
+        assert 'Server-side changes are required' in mismatch
+        assert 'Saved diagnostic ' in mismatch
+        del env['TEST_WIRE_MISMATCH']
         assert_snapshot_cleaned()
         cli('publish', '--dry-run')
         cli('publish')

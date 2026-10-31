@@ -17,7 +17,9 @@
     "build:preview": "node scripts/build-preview.mjs",
     "check:preview": "node scripts/build-preview.mjs --check",
     "test:recording-contract": "node --import tsx --test --test-name-pattern=\"CLI recording contract\" tests/cli-contract.ts && node scripts/check-recording-contract-guards.mjs",
-    "test:cli-contract": "node --import tsx tests/run-cli-contract.ts"
+    "test:cli-contract": "npm run check:recording-schema && node --import tsx tests/run-cli-contract.ts",
+    "build:recording-schema": "node --import tsx scripts/build-recording-schema.ts",
+    "check:recording-schema": "node --import tsx scripts/build-recording-schema.ts --check"
   },
   "dependencies": {
     "@scalar/hono-api-reference": "^0.12.6",

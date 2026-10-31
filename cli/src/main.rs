@@ -6,6 +6,7 @@ mod git;
 mod preview;
 mod publish;
 mod record;
+mod recording_contract;
 mod scan;
 mod state;
 mod toolchain;

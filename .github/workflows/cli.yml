@@ -86,6 +86,7 @@ jobs:
         with:
           mdbook-version: "0.4.45"
       - run: npm ci
+      - run: npm run check:recording-schema
       - run: npm run check:preview
       - run: npm run typecheck
       - run: npm test

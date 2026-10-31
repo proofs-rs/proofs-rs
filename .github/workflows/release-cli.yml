@@ -58,6 +58,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - run: npm run check:recording-schema
       - run: npm run check:preview
       - uses: dtolnay/rust-toolchain@stable
         with:

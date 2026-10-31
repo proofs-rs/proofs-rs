@@ -582,8 +582,8 @@ const relativePath = string
     "Relative path without '..', backslashes, colons or control characters.",
   );
 const logLocation = z.looseObject({ index: integer.nonnegative() });
-const toolchainSha = string.regex(/^[a-f0-9]{40}$/i);
-const toolchainDigest = string.regex(/^[a-f0-9]{64}$/i);
+const toolchainSha = string.regex(/^[a-fA-F0-9]{40}$/);
+const toolchainDigest = string.regex(/^[a-fA-F0-9]{64}$/);
 const toolchainPath = string
   .min(1)
   .max(1000)
@@ -597,7 +597,9 @@ const toolchainPath = string
   );
 const toolchainRepository = string
   .max(1000)
-  .regex(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/i);
+  .regex(
+    /^[hH][tT][tT][pP][sS]:\/\/[gG][iI][tT][hH][uU][bB]\.[cC][oO][mM]\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/,
+  );
 // Only the reproduction location is public; fingerprint internals may evolve.
 export const toolchainInput = z.looseObject({
   manifest_path: toolchainPath.refine(

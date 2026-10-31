@@ -25,7 +25,9 @@ class ContractCapture:
     def run(self, output, accepted, case=None):
         if not self.destination:
             return
-        saved = re.search(r'Saved run ([^:]+): (.+)', output)
+        saved = re.search(r'Saved (run|diagnostic) ([^:]+): (.+)', output)
+        if saved and (saved[1] == 'run') != accepted:
+            raise RuntimeError('Publishable storage did not match command outcome: ' + str(case))
         if not saved:
             if accepted or case:
                 raise RuntimeError('Expected actual CLI SARIF export: ' + str(case))
@@ -33,7 +35,7 @@ class ContractCapture:
         case = case or f'additional-{len(self.cases):03d}'
         if any(c['id'] == case for c in self.cases):
             raise RuntimeError('Duplicate contract case: ' + case)
-        raw = (Path(saved[2]) / 'run.sarif.json').read_bytes()
+        raw = (Path(saved[3]) / ('run.sarif.json' if accepted else 'diagnostic.sarif.json')).read_bytes()
         file = case + '.sarif.json'
         (self.destination / file).write_bytes(raw)
         self.cases.append({'id': case, 'file': file, 'sha256': hashlib.sha256(raw).hexdigest(),

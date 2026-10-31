@@ -87,6 +87,10 @@
       "tool": "aeneas",
       "mapping": "manual",
       "requires": ["claim-limit"]
+    },
+    "failed-recording-contract": {
+      "expect": "reject",
+      "tool": "aeneas"
     }
   }
 }

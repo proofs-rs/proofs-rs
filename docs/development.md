@@ -292,8 +292,8 @@ and publisher code with the production Worker preparation/upload handlers as its
 peer. Verifier processes are synthetic: this checks protocol compatibility, not
 proof validity. Real Lean/Aeneas audit tests remain separate.
 
-The generator copies the exact `run.sarif.json` bytes immediately after recording,
-including records expected to fail. It records SHA-256, producer version, binary
+The generator copies the exact `run.sarif.json` bytes immediately after successful
+recording, or `diagnostic.sarif.json` bytes for candidates expected to fail. It records SHA-256, producer version, binary
 hash and checkout revision in a versioned corpus manifest. No source, tool, proof
 or time fields are rewritten. `PROOFS_CONTRACT_OUTPUT` selects a fresh empty
 output directory; an existing corpus cannot silently be reused.
@@ -327,3 +327,32 @@ version 1. Keep supported versions additive; an incompatible exporter change
 requires a coordinated reader/version change and migration or compatibility
 policy, never a weakened consumer test. The corpus manifest's `formatVersion` is
 a test-artifact format and does not change the public wire version.
+
+
+### Validation before CLI storage
+
+`src/schemas.ts`'s `S.sarif` input shape generates the checked-in
+`cli/protocol/recording-v2.schema.json`. Run `npm run build:recording-schema` when
+changing it. `npm run check:recording-schema` rejects stale generated contracts
+in the CLI gate, service CI and release verification. The Cargo package embeds
+this self-contained schema in the binary; validation needs neither Node nor a
+server connection. JSON Schema network/file resolution features are disabled.
+
+After verification and source-integrity checks succeed, the CLI validates the
+8 MiB limit and the bundled schema **before creating a publishable run or updating
+latest**. A shape mismatch reports that server-side changes are required to
+support the extracted output, with a bounded field/constraint location and no
+rejected value dump. Coordinate the producer/server contract change rather than
+bypassing the guard. Failed verification, extraction and size limits are separate
+errors and do not suggest a server schema change.
+
+Rejected candidates are saved only under `diagnostics/<UUID>/diagnostic.sarif.json`
+for inspection and never replace the previous latest run. The contract gate feeds
+these exact rejected bytes to the server as negative cases. It also checks a
+successful verifier emitting an unsupported formal-evidence version, and proves
+that subsequent publication still uses the preceding valid recording.
+
+This offline guard checks input shape. Zod refinements, `readRecord` cross-field
+semantics, ownership and registered tool versions remain server checks. The
+actual CLI-to-production-handler contract gate remains required for those rules;
+passing the offline guard does not guarantee a deployed server accepts a record.
