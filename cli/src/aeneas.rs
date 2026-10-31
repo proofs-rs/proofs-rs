@@ -949,6 +949,10 @@ pub fn extract(
                 ));
                 continue;
             }
+            ensure!(
+                entry["def_id"].as_u64().is_some(),
+                "Manifest function requires a non-negative def_id: {head}"
+            );
             let name = entry["rust_name"]
                 .as_str()
                 .context("Manifest function lacks rust_name")?;

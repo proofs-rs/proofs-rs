@@ -58,7 +58,7 @@ The approved planning estimate is approximately USD 5/month at small scale with 
 
 ## Known integration limits
 
-The parser allowlists rustdoc formats 60 and 61 and rejects unsupported syntax or unresolved external reexports instead of fabricating API data. crates.io/docs.rs calls happen only on explicit user preparation. This implementation deliberately has no live import/email test in CI. Staging includes explicitly synthetic examples without shared demo logins.
+The independent rustdoc parser allowlists formats 60 and 61 and rejects unsupported syntax or unresolved external reexports instead of fabricating API data. Valid cargo-proofs records use exact recorded API bindings and do not depend on that importer succeeding. crates.io/docs.rs calls happen only on explicit user preparation. This implementation deliberately has no live import/email test in CI. Staging includes explicitly synthetic examples without shared demo logins.
 
 ## Report schema reset (2026-09-21)
 
@@ -332,3 +332,23 @@ Sitemaps omit the duplicate explicit default-version URL. Only report/claim
 verification content has `lastmod`, using its report revision or newer tool
 limitations timestamp; request/deployment time and discussion counters are not
 used as content timestamps.
+
+## Recorded callable rollout
+
+Apply migration `0016_recorded_apis.sql` before deploying the updated service.
+It adds provenance and per-run API observations without rewriting existing API,
+claim or report IDs. Deploy the service before distributing the updated CLI;
+previous CLI publishers still use their existing rustdoc preparation path.
+No toolchain re-extraction is required for an otherwise compatible saved SARIF.
+
+Validate a saved recording with the updated CLI's `publish --dry-run`: this
+transmits the SARIF for transient server validation but does not persist an
+artifact, create an import job, or publish a report. A successful dry-run is not
+a production publication. Actual publish still enforces source, tool, successful
+results, owned immutable runs, exact formal references, dependencies and report
+revision checks. Do not describe an uploaded observation as server-replayed.
+
+Local acceptance with the original CRC recordings can be run using
+`PROOFS_CRC_RECORDS=/absolute/path/records.json PROOFS_CRC_PROJECT=/absolute/path/crc/3.4.0 node --import tsx --test --test-name-pattern='original CRC' tests/app.test.ts`.
+Build `cli/target/debug/cargo-proofs` first. The test uses an isolated local
+Worker/SQLite/R2 fixture and temporary credentials, never production publication.

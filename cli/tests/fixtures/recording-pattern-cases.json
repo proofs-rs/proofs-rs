@@ -1,0 +1,38 @@
+[
+  {
+    "value": {
+      "kind": "git",
+      "repository": "https://github.com/Org/Repo",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "accept": true
+  },
+  {
+    "value": {
+      "kind": "git",
+      "repository": "HTTPS://GITHUB.COM/Org/Repo",
+      "commit": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "accept": true
+  },
+  {
+    "value": {
+      "kind": "git_patch",
+      "repository": "HtTpS://GiThUb.CoM/Org/Repo/",
+      "base_commit": "aBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaB",
+      "patch": {
+        "path": "patches/test.patch",
+        "sha256": "AbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+      }
+    },
+    "accept": true
+  },
+  {
+    "value": {
+      "kind": "git",
+      "repository": "https://github.com/Org/Repo",
+      "commit": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
+    },
+    "accept": false
+  }
+]

@@ -377,6 +377,7 @@ export function createViews(
     const apis = [...apiMap.values()].map((api) => ({
       ...api,
       signature: api.signature ?? "",
+      origin: api.origin,
       kind:
         api.kind || (api.signature?.startsWith("impl") ? "method" : "function"),
     }));
@@ -451,8 +452,8 @@ export function createViews(
   }
   function claimContent(c: any, stars = false) {
     return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}
-    <p>${apiHref(c.api_item_id) ? `<a href="${esc(apiHref(c.api_item_id))}"><code>${esc(c.display_path)}</code></a>` : `<code>${esc(c.display_path)}</code> · API unverified`}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p>
-    <pre class="signature">${signatureHTML(c.signature ?? "")}</pre><p>Tool: ${toolLink(c)}</p>
+    <p>${!c.unverified && apiHref(c.api_item_id) ? `<a href="${esc(apiHref(c.api_item_id))}"><code>${esc(c.display_path)}</code></a>` : `<code>${esc(c.display_path)}</code> · API unverified`}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p>
+    ${c.origin === "recorded" ? `<p class="meta">Recorded callable · signature and safety not independently recorded.</p>` : `<pre class="signature">${signatureHTML(c.signature ?? "")}</pre>`}<p>Tool: ${toolLink(c)}</p>
     ${c.explanation ? `<section class="report-section report-explanation"><h2>Overview</h2><div class="markdown-body">${renderMarkdown(c.explanation, 2)}</div></section>` : options.preview ? '<p class="claim-explanation-missing" role="note"><strong>No claim explanation.</strong> Readers will rely on the report Overview to learn what this claim guarantees, under which conditions, and what it leaves unverified.</p>' : `<p class="claim-explanation-missing meta">This claim has no explanation of its own. ${c.report_id ? `Read the <a href="${esc(external(`/report/${enc(String(c.report_id))}#overview`))}">report Overview</a>, and treat` : "Treat"} the ${c.formal_evidence ? "formal statement" : "preconditions and evidence"} below as authoritative. See <a href="${esc(external("/book/concepts.html"))}">Concepts and terminology</a>.</p>`}
     <section class="report-section"><h2>Preconditions</h2><p class="plain-text code">${esc(c.precondition || (c.evidence_ref ? "See the formal statement, including input types and instances, for conditions." : "None stated"))}</p></section>
     ${c.formal_evidence ? formalStatement(c.formal_evidence) : ""}

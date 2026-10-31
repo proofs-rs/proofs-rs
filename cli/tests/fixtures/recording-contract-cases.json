@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "schemaVersion": 2,
+  "cases": {
+    "kani": {
+      "expect": "accept",
+      "tool": "kani"
+    },
+    "kani-structural": {
+      "expect": "accept",
+      "tool": "kani",
+      "requires": ["structural-path"]
+    },
+    "kani-aliases": {
+      "expect": "accept",
+      "tool": "kani",
+      "requires": ["aliases"]
+    },
+    "kani-dependency": {
+      "expect": "accept",
+      "tool": "kani",
+      "requires": ["dependency"]
+    },
+    "failed-mutated-source": {
+      "expect": "reject",
+      "tool": "kani"
+    },
+    "creusot-annotated": {
+      "expect": "accept",
+      "tool": "creusot",
+      "target": "annotated"
+    },
+    "creusot-all": {
+      "expect": "accept",
+      "tool": "creusot",
+      "target": "all"
+    },
+    "aeneas-manual": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual"
+    },
+    "aeneas-concrete": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual",
+      "discovery": "compiler_checked_concrete_instances",
+      "requires": ["concrete-path", "inherited-default"]
+    },
+    "aeneas-expanded": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual",
+      "discovery": "compiler_expansion"
+    },
+    "aeneas-manifest": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manifest"
+    },
+    "aeneas-many-theorems": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual",
+      "requires": ["multiple-theorems"]
+    },
+    "failed-aeneas-build": {
+      "expect": "reject",
+      "tool": "aeneas"
+    },
+    "failed-aeneas-audit": {
+      "expect": "reject",
+      "tool": "aeneas"
+    },
+    "failed-aeneas-manifest": {
+      "expect": "reject",
+      "tool": "aeneas"
+    },
+    "aeneas-toolchain": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual",
+      "requires": ["toolchain"]
+    },
+    "aeneas-claim-limit": {
+      "expect": "accept",
+      "tool": "aeneas",
+      "mapping": "manual",
+      "requires": ["claim-limit"]
+    },
+    "failed-recording-contract": {
+      "expect": "reject",
+      "tool": "aeneas"
+    }
+  }
+}

@@ -206,8 +206,6 @@ pub fn run(args: &ProjectArgs, mut command: Vec<String>) -> Result<()> {
     )?;
     let rid = uuid::Uuid::new_v4().to_string();
     let base = state_dir(&project)?;
-    let dir = base.join("runs").join(&rid);
-    fs::create_dir_all(&dir)?;
     let stage = tempfile::tempdir()?;
     let checkout = crate::git::Worktree::create(
         &root,
@@ -520,19 +518,18 @@ pub fn run(args: &ProjectArgs, mut command: Vec<String>) -> Result<()> {
         sarif["runs"][0]["properties"]["proofs"]["aeneas_extraction_source"] = json!(source);
     }
     let bytes = serde_json::to_vec_pretty(&sarif)?;
-    fs::write(dir.join("run.sarif.json"), &bytes)?;
-    ensure!(
-        bytes.len() <= 8 * 1024 * 1024,
-        "SARIF including logs exceeds 8 MiB"
-    );
-    state::write(&base.join("latest.json"), &rid)?;
-    println!("Saved run {rid}: {}", dir.display());
-    unchanged?;
-    ensure!(
-        successful,
-        "Verification did not produce publishable results. SARIF including logs saved locally. {}",
-        diagnostic.unwrap_or_default()
-    );
+    if !successful {
+        crate::recording_contract::diagnostic(&base, &rid, &bytes)?;
+        unchanged?;
+        anyhow::bail!(
+            "Verification did not produce publishable results. SARIF including logs saved as diagnostics. {}",
+            diagnostic.unwrap_or_default()
+        );
+    }
+    if let Err(error) = crate::recording_contract::save(&base, &rid, &sarif, &bytes) {
+        crate::recording_contract::diagnostic(&base, &rid, &bytes)?;
+        return Err(error);
+    }
     Ok(())
 }
 fn scope_metadata(metadata: &Value, tree: &str) -> Result<Value> {
@@ -1054,6 +1051,15 @@ fn proved(v: &Value) -> bool {
             });
     }
     false
+}
+
+pub fn observed_api_id(name: &str, version: &str, path: &str) -> Result<String> {
+    Ok(state::digest(&serde_json::to_string(&json!([
+        "recorded-api-v1",
+        name,
+        version,
+        path
+    ]))?))
 }
 
 #[cfg(test)]

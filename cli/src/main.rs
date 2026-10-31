@@ -6,6 +6,7 @@ mod git;
 mod preview;
 mod publish;
 mod record;
+mod recording_contract;
 mod scan;
 mod state;
 mod toolchain;
@@ -116,7 +117,7 @@ enum Commands {
     Publish {
         #[command(flatten)]
         project: ProjectArgs,
-        /// Preview recorded evidence without uploading; may prepare the API catalogue.
+        /// Validate recorded evidence and API bindings without storing evidence or publishing.
         #[arg(long)]
         dry_run: bool,
         /// Select a recorded run (defaults to the latest run).

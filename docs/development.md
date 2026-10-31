@@ -283,3 +283,76 @@ crates or releases return 404. Use
 `https://img.shields.io/endpoint?url=<URL-encoded endpoint URL>` as the image URL
 and link it to the crate page with `?version=...`. Shields.io caches the image,
 so changes may take time to appear.
+
+## CLI export and ingestion contract gate
+
+Run `cargo build --manifest-path cli/Cargo.toml --locked` followed by
+`npm run test:cli-contract`. This required gate runs the actual CLI's recording
+and publisher code with the production Worker preparation/upload handlers as its
+peer. Verifier processes are synthetic: this checks protocol compatibility, not
+proof validity. Real Lean/Aeneas audit tests remain separate.
+
+The generator copies the exact `run.sarif.json` bytes immediately after successful
+recording, or `diagnostic.sarif.json` bytes for candidates expected to fail. It records SHA-256, producer version, binary
+hash and checkout revision in a versioned corpus manifest. No source, tool, proof
+or time fields are rewritten. `PROOFS_CONTRACT_OUTPUT` selects a fresh empty
+output directory; an existing corpus cannot silently be reused.
+
+The server consumer uses the real `src/schemas.ts`, `readRecord`, HTTP handlers
+and migration-backed SQLite/R2 fixture. Every accepted record must prepare,
+upload, validate and publish locally with the same bytes, exact API bindings and
+formal evidence; failed records must be rejected. The returned bindings also go
+back through the actual CLI publisher. Missing corpus, stale checkout/binary,
+missing mandatory cases, altered bytes and semantic mismatches fail the gate.
+A negative self-check proves that missing data and even a rehashed but invalid
+formal manifest cannot pass.
+
+Mandatory coverage is registered once in
+`cli/tests/fixtures/recording-contract-cases.json`: Kani, Creusot annotated/all,
+Aeneas manual/manifest, macro expansion, concrete generic/const instances,
+inherited defaults, multiple theorems, structural paths, aliases, dependencies,
+toolchain provenance, the maximum claim count and failed recordings. The consumer checks coverage against
+the actual exported fields instead of trusting labels. Any new adapter or export
+mode must add a producer scenario and semantic coverage assertion there.
+
+`npm run test:recording-contract` consumes an existing fresh manifest named by
+`PROOFS_CLI_CONTRACT` and fails if it is absent. Set `PROOFS_TEST_CLI` when testing a
+non-default binary. CI runs the complete generation/consumption gate in each
+Linux/macOS Rust matrix entry, against the packaged binary, and before CLI release.
+Synthetic corpus artifacts are retained on failure for diagnosis. The ordinary
+service unit suite does not replace this dedicated required gate.
+
+Current wire compatibility is `proofs.schemaVersion = 2`, with formal evidence
+version 1. Keep supported versions additive; an incompatible exporter change
+requires a coordinated reader/version change and migration or compatibility
+policy, never a weakened consumer test. The corpus manifest's `formatVersion` is
+a test-artifact format and does not change the public wire version.
+
+
+### Validation before CLI storage
+
+`src/schemas.ts`'s `S.sarif` input shape generates the checked-in
+`cli/protocol/recording-v2.schema.json`. Run `npm run build:recording-schema` when
+changing it. `npm run check:recording-schema` rejects stale generated contracts
+in the CLI gate, service CI and release verification. The Cargo package embeds
+this self-contained schema in the binary; validation needs neither Node nor a
+server connection. JSON Schema network/file resolution features are disabled.
+
+After verification and source-integrity checks succeed, the CLI validates the
+8 MiB limit and the bundled schema **before creating a publishable run or updating
+latest**. A shape mismatch reports that server-side changes are required to
+support the extracted output, with a bounded field/constraint location and no
+rejected value dump. Coordinate the producer/server contract change rather than
+bypassing the guard. Failed verification, extraction and size limits are separate
+errors and do not suggest a server schema change.
+
+Rejected candidates are saved only under `diagnostics/<UUID>/diagnostic.sarif.json`
+for inspection and never replace the previous latest run. The contract gate feeds
+these exact rejected bytes to the server as negative cases. It also checks a
+successful verifier emitting an unsupported formal-evidence version, and proves
+that subsequent publication still uses the preceding valid recording.
+
+This offline guard checks input shape. Zod refinements, `readRecord` cross-field
+semantics, ownership and registered tool versions remain server checks. The
+actual CLI-to-production-handler contract gate remains required for those rules;
+passing the offline guard does not guarantee a deployed server accepts a record.

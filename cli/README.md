@@ -150,9 +150,11 @@ editing, publishing, comments, and stars are not available in the preview.
 
 `preview` opens the reader-facing UI and uses GET requests only. It does not run
 the verifier or require Node.js for any other CLI command. `publish --dry-run`
-prints prospective publication data, requires login, and may create an API
-catalogue import on the service. Neither publishes a report; only `publish`
-performs the final server-side validation and publication.
+prints prospective publication data and requires login. It sends the selected
+SARIF to `/api/v1/runs/prepare` for transient validation and exact API bindings;
+it does not store SARIF, create catalogue entries or import jobs, or publish a
+report. Only `publish` stores evidence and performs final report validation and
+publication. This protocol requires the updated CLI and service together.
 
 ### Troubleshooting
 
@@ -194,7 +196,7 @@ Omitting `[dependencies]` preserves the existing report's reviews when revising.
 - Multiple contract harnesses for one API, ambiguous targets/reexports, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - For standard `Default`, `Clone`, `Hasher`, `Display`, and `FromStr` implementations, discovery also records the short trait spelling used by rustdoc catalogues. Arbitrary external trait basenames are not guessed.
-- The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
+- Every callable in a valid recorded run receives an exact API binding from the service. Existing exact rustdoc IDs are retained, including supported trait aliases. Otherwise its precise spelling is stored as an author-attributed recorded callable, without inventing a Rust signature, safety status or docs.rs entry. Concrete type arguments and inherited default methods are not erased. The immutable run and selected theorem remain authoritative for claim scope; recorded callables are not independent compiler-replay attestations.
 - The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
 
 ## Creusot
@@ -308,11 +310,13 @@ Coq, F*, and HOL4 are not currently supported.
 
 Verification runs in a detached temporary Git worktree at that commit, with a separate build directory and locked dependency resolution. Git determines the checkout contents; there is no custom source collector, archive, file-count limit, or source upload size limit. The worktree registration and files are removed on success and errors. Tracked input changes during verification prevent publication.
 
+Before saving a publishable run, the CLI checks the 8 MiB limit and an embedded schema generated from the server input contract. A schema mismatch stops with “Server-side changes are required”; the CLI and server contract need a coordinated update. This offline check covers format; semantic and authorization checks still run on the server.
+
 Each run directory contains only `run.sarif.json`. SARIF is the canonical record for source provenance, command, timing, contracts, results and embedded stdout/stderr. The latest-run pointer and report publication state are local navigation/retry state, not duplicate execution records. Review the logs before publishing. The complete SARIF has an 8 MiB limit. `publish` sends it in one request; there is no separate metadata registration.
 
 - Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
 - Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. Free-function sessions and Creusot 0.13 method sessions are supported. Method sessions are matched by the generated Coma declaration source span and method name; ambiguous matches are rejected.
-- A failed process, changed worktree, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
+- A failed process, changed worktree, or run without verified contracts cannot be published. Rejected candidates remain local under `diagnostics/<UUID>/diagnostic.sarif.json` for inspection, without creating a publishable run or replacing the previous latest recording.
 - Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani -Z function-contracts --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
 - One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.
 
@@ -331,7 +335,7 @@ Publication state is stored in the OS local data directory under `cargo-proofs/`
 - Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass recorded-run checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
 - Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original recorded evidence. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, reads the selected SARIF, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 200 claims (Kani discovery supports up to 100 APIs) and 128 KiB; each Aeneas theorem counts as one claim. Automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline. It authenticates and sends the selected SARIF to the service for the same structural, source, tool, successful-result and formal-evidence checks used by upload, then previews exact API bindings without storing the artifact. It does not perform final report creation/revision validation. Publication no longer requires a docs.rs catalogue import. The report limit is 200 claims (Kani discovery supports up to 100 APIs) and 128 KiB; each Aeneas theorem counts as one claim. Automatic splitting is deliberately unsupported.
 
 ## Development
 
@@ -542,3 +546,12 @@ paths. Explicit mappings are checked before rebuilding Lean.
 Compiler expansion also enumerates inherited defaults from active traits defined
 in the selected crate. Explicit implementations replace defaults; private traits
 and unknown external defaults are excluded. This supplies callable paths only.
+
+### Export/ingestion compatibility checks
+
+`npm run test:cli-contract` (from the repository root after building the CLI)
+requires production CLI exports to pass production server ingestion. It covers
+concrete and inherited APIs, manifest/manual proofs, toolchain provenance and
+failed runs. CI also checks the packaged binary and blocks release on a mismatch.
+See `docs/development.md` for corpus capture and coverage rules. Verifier fixtures
+in this gate are synthetic; real Lean checks are a separate requirement.

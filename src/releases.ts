@@ -22,3 +22,13 @@ export const compareReleases = (
   a: { version: string },
   b: { version: string },
 ) => semver.rcompare(a.version, b.version);
+
+/** Strict Cargo SemVer, including build metadata which node-semver.valid omits. */
+export function exactCargoVersion(version: string): boolean {
+  const parsed = semver.parse(version);
+  return (
+    !!parsed &&
+    `${parsed.version}${parsed.build.length ? "+" + parsed.build.join(".") : ""}` ===
+      version
+  );
+}

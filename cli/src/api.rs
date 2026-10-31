@@ -107,7 +107,7 @@ impl Api {
         }
         Ok(value)
     }
-    pub fn upload(&self, path: &str, bytes: &[u8]) -> Result<()> {
+    pub fn upload(&self, path: &str, bytes: &[u8]) -> Result<Value> {
         ensure!(path.starts_with("/api/v1/runs/"), "Invalid artifact path");
         let response = self
             .client
@@ -121,35 +121,10 @@ impl Api {
             "Artifact upload failed: {}",
             response.text()?
         );
-        Ok(())
+        Ok(response.json::<Value>()?)
     }
     pub fn get(&self, path: &str) -> Result<Value> {
         self.request("GET", path, None, None)
-    }
-    pub fn prepare(&self, name: &str, version: &str) -> Result<()> {
-        let mut job = self.request(
-            "POST",
-            "/api/v1/publish/prepare",
-            Some(&json!({"crate":name,"version":version})),
-            None,
-        )?;
-        let start = Instant::now();
-        while job["status"] != "ready" {
-            ensure!(
-                job["status"] != "failed",
-                "API catalogue import failed: {}",
-                job["error_code"]
-            );
-            ensure!(
-                start.elapsed() < Duration::from_secs(600),
-                "API catalogue import is still pending; retry publish later"
-            );
-            let id = job["id"].as_str().context("Missing import job ID")?;
-            eprintln!("Preparing API catalogue ({})…", job["status"]);
-            thread::sleep(Duration::from_secs(3));
-            job = self.get(&format!("/api/v1/imports/{id}"))?;
-        }
-        Ok(())
     }
     pub fn tool_version(&self, name: &str, version: &str) -> Result<String> {
         let all = self.get("/api/v1/tools")?;

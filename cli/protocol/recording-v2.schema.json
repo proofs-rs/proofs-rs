@@ -1,0 +1,1019 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/Sarif",
+  "$defs": {
+    "Sarif": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "runs": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "version",
+        "runs"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema27"
+      },
+      "description": "Recorded SARIF 2.1.0. Each contract needs matching successful results; times, line ranges, paths and log references are checked before storage."
+    },
+    "__schema0": {
+      "type": "string",
+      "const": "2.1.0"
+    },
+    "__schema1": {
+      "minItems": 1,
+      "maxItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "__schema2": {
+      "type": "object",
+      "properties": {
+        "automationDetails": {
+          "type": "object",
+          "properties": {
+            "guid": {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "required": [
+            "guid"
+          ],
+          "additionalProperties": {}
+        },
+        "tool": {
+          "type": "object",
+          "properties": {
+            "driver": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "minLength": 1,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "version": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "name",
+                "version"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "driver"
+          ],
+          "additionalProperties": {}
+        },
+        "versionControlProvenance": {
+          "minItems": 1,
+          "maxItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "invocations": {
+          "minItems": 1,
+          "maxItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema5"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema10"
+          },
+          "description": "At least one invocation log must refer to an artifact containing embedded text. Source contents are not accepted."
+        },
+        "results": {
+          "maxItems": 50000,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema11"
+          }
+        },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "proofs": {
+              "type": "object",
+              "properties": {
+                "schemaVersion": {
+                  "type": "number",
+                  "const": 2
+                },
+                "toolchain": {
+                  "type": "object",
+                  "properties": {
+                    "schema_version": {
+                      "$ref": "#/$defs/__schema12"
+                    },
+                    "components": {
+                      "$ref": "#/$defs/__schema13"
+                    },
+                    "uses": {
+                      "$ref": "#/$defs/__schema19"
+                    }
+                  },
+                  "required": [
+                    "schema_version",
+                    "components",
+                    "uses"
+                  ],
+                  "additionalProperties": false
+                },
+                "toolchain_input": {
+                  "type": "object",
+                  "properties": {
+                    "manifest_path": {
+                      "$ref": "#/$defs/__schema18"
+                    }
+                  },
+                  "required": [
+                    "manifest_path"
+                  ],
+                  "additionalProperties": {}
+                },
+                "dependencies": {
+                  "maxItems": 10000,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema21"
+                  }
+                },
+                "crate": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "contracts": {
+                  "minItems": 1,
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema22"
+                  }
+                }
+              },
+              "required": [
+                "schemaVersion",
+                "dependencies",
+                "crate",
+                "version",
+                "contracts"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "proofs"
+          ],
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "automationDetails",
+        "tool",
+        "versionControlProvenance",
+        "invocations",
+        "artifacts",
+        "results",
+        "properties"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema3": {
+      "type": "string"
+    },
+    "__schema4": {
+      "type": "object",
+      "properties": {
+        "repositoryUri": {
+          "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$",
+          "$ref": "#/$defs/__schema3"
+        },
+        "revisionId": {
+          "pattern": "^[a-f0-9]{40}$",
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "repositoryUri",
+        "revisionId"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema5": {
+      "type": "object",
+      "properties": {
+        "executableLocation": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "required": [
+            "uri"
+          ],
+          "additionalProperties": {}
+        },
+        "arguments": {
+          "maxItems": 199,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "workingDirectory": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "$ref": "#/$defs/__schema7"
+            }
+          },
+          "required": [
+            "uri"
+          ],
+          "additionalProperties": {}
+        },
+        "startTimeUtc": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "endTimeUtc": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "executionSuccessful": {
+          "type": "boolean",
+          "const": true
+        },
+        "exitCode": {
+          "type": "number",
+          "const": 0
+        },
+        "stdout": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "stderr": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "stdoutStderr": {
+          "$ref": "#/$defs/__schema8"
+        }
+      },
+      "required": [
+        "executableLocation",
+        "arguments",
+        "workingDirectory",
+        "startTimeUtc",
+        "endTimeUtc",
+        "executionSuccessful",
+        "exitCode"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema6": {
+      "maxLength": 4000,
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema7": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "Relative path without '..', backslashes, colons or control characters.",
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "$ref": "#/$defs/__schema9"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema9": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "__schema10": {
+      "type": "object",
+      "properties": {
+        "contents": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      "additionalProperties": {}
+    },
+    "__schema11": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": {}
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "open",
+            "notApplicable",
+            "informational",
+            "review"
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "harness": {
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "message",
+        "kind"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema12": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema13": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/__schema14"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema15"
+      }
+    },
+    "__schema14": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,99}$",
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema15": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "$ref": "#/$defs/__schema3"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "git"
+                },
+                "repository": {
+                  "$ref": "#/$defs/__schema16"
+                },
+                "commit": {
+                  "$ref": "#/$defs/__schema17"
+                }
+              },
+              "required": [
+                "kind",
+                "repository",
+                "commit"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "git_patch"
+                },
+                "repository": {
+                  "$ref": "#/$defs/__schema16"
+                },
+                "base_commit": {
+                  "$ref": "#/$defs/__schema17"
+                },
+                "patch": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "#/$defs/__schema18"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-fA-F0-9]{64}$",
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "repository",
+                "base_commit",
+                "patch"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "release"
+                },
+                "release_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "^[^\\s\\x00-\\x1f\\x7f]+$",
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "kind",
+                "release_id"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "materialized": {
+          "type": "object",
+          "properties": {
+            "git_tree": {
+              "$ref": "#/$defs/__schema17"
+            }
+          },
+          "required": [
+            "git_tree"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "tool",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "__schema16": {
+      "type": "string",
+      "maxLength": 1000,
+      "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/[gG][iI][tT][hH][uU][bB]\\.[cC][oO][mM]\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/?$",
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema17": {
+      "pattern": "^[a-fA-F0-9]{40}$",
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema18": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "$ref": "#/$defs/__schema3"
+    },
+    "__schema19": {
+      "minItems": 1,
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema20"
+      }
+    },
+    "__schema20": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "$ref": "#/$defs/__schema3"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "$ref": "#/$defs/__schema3"
+        },
+        "observation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "dependency_resolved"
+                },
+                "dependency_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "subdirectory": {
+                  "$ref": "#/$defs/__schema18"
+                }
+              },
+              "required": [
+                "kind",
+                "dependency_name",
+                "subdirectory"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "process_executed"
+                },
+                "reported_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "kind",
+                "reported_version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "not_run"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "component",
+        "role",
+        "observation"
+      ],
+      "additionalProperties": false
+    },
+    "__schema21": {
+      "type": "object",
+      "properties": {
+        "crate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "$ref": "#/$defs/__schema3"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "$ref": "#/$defs/__schema3"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "crate",
+        "version",
+        "source"
+      ]
+    },
+    "__schema22": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "first_line": {
+          "exclusiveMinimum": 0,
+          "$ref": "#/$defs/__schema9"
+        },
+        "last_line": {
+          "exclusiveMinimum": 0,
+          "$ref": "#/$defs/__schema9"
+        },
+        "harness": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "api_paths": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "precondition": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "formal": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "number",
+              "const": 1
+            },
+            "theorem": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "$ref": "#/$defs/__schema3"
+            },
+            "module": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "$ref": "#/$defs/__schema3"
+            },
+            "statement": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "$ref": "#/$defs/__schema3"
+            },
+            "binders": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema23"
+              }
+            },
+            "conclusion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "$ref": "#/$defs/__schema3"
+            },
+            "conclusion_segments": {
+              "$ref": "#/$defs/__schema24"
+            },
+            "program": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema3"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "program_head": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema3"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "axioms": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema3"
+              }
+            },
+            "mapping": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "manifest"
+              ]
+            },
+            "manifest": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000,
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "aeneas_version": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "charon_version": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "entry": {
+                      "type": "object",
+                      "properties": {
+                        "lean_name": {
+                          "minLength": 1,
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "lean_file": {
+                          "minLength": 1,
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "rust_name": {
+                          "minLength": 1,
+                          "$ref": "#/$defs/__schema3"
+                        },
+                        "def_id": {
+                          "minimum": 0,
+                          "$ref": "#/$defs/__schema9"
+                        },
+                        "is_local": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "file": {
+                              "$ref": "#/$defs/__schema3"
+                            },
+                            "begin_line": {
+                              "exclusiveMinimum": 0,
+                              "$ref": "#/$defs/__schema9"
+                            },
+                            "end_line": {
+                              "exclusiveMinimum": 0,
+                              "$ref": "#/$defs/__schema9"
+                            }
+                          },
+                          "required": [
+                            "file",
+                            "begin_line",
+                            "end_line"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "lean_name",
+                        "lean_file",
+                        "rust_name",
+                        "def_id",
+                        "is_local",
+                        "source"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256",
+                    "aeneas_version",
+                    "charon_version",
+                    "entry"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "first_line": {
+                  "exclusiveMinimum": 0,
+                  "$ref": "#/$defs/__schema9"
+                },
+                "last_line": {
+                  "exclusiveMinimum": 0,
+                  "$ref": "#/$defs/__schema9"
+                }
+              },
+              "required": [
+                "file",
+                "first_line",
+                "last_line"
+              ],
+              "additionalProperties": false
+            },
+            "definitions": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema26"
+              }
+            },
+            "definitions_truncated": {
+              "type": "boolean"
+            },
+            "translation_rerun": {
+              "type": "boolean",
+              "const": false
+            }
+          },
+          "required": [
+            "version",
+            "theorem",
+            "module",
+            "statement",
+            "binders",
+            "conclusion",
+            "program",
+            "program_head",
+            "axioms",
+            "mapping",
+            "manifest",
+            "source",
+            "definitions",
+            "definitions_truncated",
+            "translation_rerun"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "file",
+        "first_line",
+        "last_line",
+        "harness",
+        "api_paths",
+        "precondition"
+      ],
+      "additionalProperties": {}
+    },
+    "__schema23": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "type_segments": {
+          "$ref": "#/$defs/__schema24"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "variable",
+            "hypothesis",
+            "instance"
+          ]
+        },
+        "binder": {
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "kind",
+        "binder"
+      ],
+      "additionalProperties": false
+    },
+    "__schema24": {
+      "maxItems": 10000,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema25"
+      }
+    },
+    "__schema25": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "maxLength": 1000000,
+          "$ref": "#/$defs/__schema3"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "__schema26": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "module": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "first_line": {
+                  "exclusiveMinimum": 0,
+                  "$ref": "#/$defs/__schema9"
+                },
+                "last_line": {
+                  "exclusiveMinimum": 0,
+                  "$ref": "#/$defs/__schema9"
+                }
+              },
+              "required": [
+                "file",
+                "first_line",
+                "last_line"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "module"
+      ],
+      "additionalProperties": false
+    },
+    "__schema27": {}
+  },
+  "$comment": "Generated by scripts/build-recording-schema.ts from src/schemas.ts S.sarif (input shape). Zod refinements and readRecord cross-field/authorization checks remain server semantics; see docs/development.md."
+}

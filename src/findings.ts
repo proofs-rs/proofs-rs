@@ -1,3 +1,4 @@
+import { visibleAPI, apiOrigin, apiObservation } from "./recorded-api-sql";
 import { Hono } from "hono";
 import type { App, Ctx } from "./core";
 import {
@@ -95,7 +96,7 @@ export async function reportFindings(db: D1Database, reportID: number) {
     ),
     stmt(
       db,
-      "SELECT fa.finding_id,a.* FROM finding_apis fa JOIN api_items a ON a.id=fa.api_item_id JOIN findings f ON f.id=fa.finding_id WHERE f.report_id=? ORDER BY a.display_path",
+      `SELECT fa.finding_id,a.*,${apiOrigin()} origin FROM finding_apis fa JOIN api_items a ON a.id=fa.api_item_id JOIN findings f ON f.id=fa.finding_id WHERE f.report_id=? ORDER BY a.display_path`,
       reportID,
     ),
     stmt(
@@ -106,7 +107,9 @@ export async function reportFindings(db: D1Database, reportID: number) {
   ]);
   return found.results.map((f: any) => ({
     ...f,
-    apis: apis.results.filter((a: any) => a.finding_id === f.id),
+    apis: apis.results
+      .filter((a: any) => a.finding_id === f.id)
+      .map(apiObservation),
     links: links.results.filter((l: any) => l.finding_id === f.id),
   }));
 }
@@ -114,25 +117,33 @@ export async function validateFinding(
   db: D1Database,
   input: unknown,
   releaseID: number,
+  allowedRecordedAPIs: string[] = [],
 ): Promise<FindingInput> {
   const parsed = S.findingInput.safeParse(input);
   if (!parsed.success)
     throw new Fault(400, "invalid_finding", parsed.error.message);
-  await validateAPIs(db, parsed.data.api_item_ids, releaseID);
+  await validateAPIs(
+    db,
+    parsed.data.api_item_ids,
+    releaseID,
+    allowedRecordedAPIs,
+  );
   return parsed.data;
 }
 async function validateAPIs(
   db: D1Database,
   ids: string[] | undefined,
   releaseID: number,
+  allowedRecordedAPIs: string[] = [],
 ) {
   for (const id of ids ?? []) {
     if (
       !(await one(
         db,
-        "SELECT id FROM api_items WHERE id=? AND release_id=?",
+        `SELECT a.id FROM api_items a WHERE a.id=? AND a.release_id=? AND (${visibleAPI()} OR a.id IN (SELECT value FROM json_each(?)))`,
         id,
         releaseID,
+        JSON.stringify(allowedRecordedAPIs),
       ))
     )
       throw new Fault(400, "api_not_in_release");

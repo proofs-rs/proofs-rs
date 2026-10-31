@@ -1,7 +1,7 @@
 import { operation } from "./openapi";
 import * as S from "./schemas";
 import { Hono } from "hono";
-import semver from "semver";
+import { exactCargoVersion } from "./releases";
 import {
   App,
   Env,
@@ -648,7 +648,7 @@ export async function refreshCatalog(env: Env, releaseId: number) {
         .map(async (a) =>
           stmt(
             env.DB,
-            "INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(release_id,canonical_key) DO NOTHING",
+            "INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(release_id,canonical_key) DO UPDATE SET kind=excluded.kind,is_unsafe=excluded.is_unsafe,signature=excluded.signature,upstream_url=excluded.upstream_url WHERE EXISTS(SELECT 1 FROM api_item_provenance ap WHERE ap.api_item_id=api_items.id AND ap.origin='recorded')",
             await hash(releaseId + ":" + a.canonical_key),
             releaseId,
             a.canonical_key,
@@ -665,6 +665,7 @@ export async function refreshCatalog(env: Env, releaseId: number) {
       0,
     );
   }
+  await promoteImportedAPIs(env.DB, releaseId, apis);
   await saveMetadata(env.DB, releaseId, metadata);
   await markCatalogCurrent(env.DB, releaseId).run();
   return { indexed: apis.length, added };
@@ -702,8 +703,7 @@ importRoutes.post(
       version = text(b.version, "Version", 100, true);
     if (
       !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name) ||
-      !semver.valid(version) ||
-      semver.valid(version) !== version
+      !exactCargoVersion(version)
     )
       throw new Fault(400, "exact_crate_version_required");
     if (
@@ -895,7 +895,7 @@ export async function importJob(env: Env, id: string) {
           .map((a) =>
             stmt(
               db,
-              "INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(release_id,canonical_key) DO NOTHING",
+              "INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(release_id,canonical_key) DO UPDATE SET kind=excluded.kind,is_unsafe=excluded.is_unsafe,signature=excluded.signature,upstream_url=excluded.upstream_url WHERE EXISTS(SELECT 1 FROM api_item_provenance ap WHERE ap.api_item_id=api_items.id AND ap.origin='recorded')",
               a.id,
               rel.id,
               a.canonical_key,
@@ -907,6 +907,7 @@ export async function importJob(env: Env, id: string) {
             ),
           ),
       );
+    await promoteImportedAPIs(db, rel.id, apis);
     await saveMetadata(db, rel.id, metadata);
     await batch(db, [
       stmt(
@@ -991,4 +992,24 @@ async function saveMetadata(
       ),
     );
   }
+}
+
+async function promoteImportedAPIs(
+  db: D1Database,
+  release: number,
+  apis: { canonical_key: string }[],
+) {
+  for (let i = 0; i < apis.length; i += 50)
+    await db.batch(
+      apis
+        .slice(i, i + 50)
+        .map((a) =>
+          stmt(
+            db,
+            "DELETE FROM api_item_provenance WHERE api_item_id IN (SELECT id FROM api_items WHERE release_id=? AND canonical_key=? AND kind<>'callable')",
+            release,
+            a.canonical_key,
+          ),
+        ),
+    );
 }
