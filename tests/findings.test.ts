@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fixture, reportInput } from "./app.test";
+import { fixture, reportInput } from "./support/service-fixture";
 import { app } from "../src/worker";
 import { JSDOM } from "jsdom";
 import { hash } from "../src/core";

@@ -46,6 +46,8 @@ jobs:
       - run: cargo fmt --check
       - run: cargo test --locked
       - run: cargo build --locked
+      - name: Install server contract dependencies
+        run: npm ci --prefix ..
       - name: Check crates.io package
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
         run: |
@@ -53,8 +55,21 @@ jobs:
           cargo package --locked
           cargo build --manifest-path target/package/cargo-proofs-*/Cargo.toml --target-dir target/package-check --locked
           python3 target/package/cargo-proofs-*/tests/preview.py target/package-check/debug/cargo-proofs
+          PROOFS_CONTRACT_OUTPUT="$RUNNER_TEMP/proofs-package-contract" PROOFS_TEST_CLI="$PWD/target/package-check/debug/cargo-proofs" npm --prefix .. run test:cli-contract
           python3 -c 'from pathlib import Path; assert any(p.stat().st_size for p in Path("target/package").glob("*.crate")), "Missing release archive"'
-      - run: python3 tests/e2e.py target/debug/cargo-proofs
+      - name: CLI export to server ingestion contract
+        env:
+          PROOFS_CONTRACT_OUTPUT: ${{ runner.temp }}/proofs-recording-contract
+        run: |
+          npm --prefix .. run test:cli-contract
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recording-contract-${{ matrix.os }}-${{ matrix.rust }}
+          path: |
+            ${{ runner.temp }}/proofs-recording-contract
+            ${{ runner.temp }}/proofs-package-contract
+          if-no-files-found: ignore
       - run: python3 tests/preview.py target/debug/cargo-proofs
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo run -- proofs --help

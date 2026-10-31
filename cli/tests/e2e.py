@@ -9,8 +9,12 @@ import sys
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from contract_capture import ContractCapture
 
 binary = str(Path(sys.argv[1]).resolve())
+capture = ContractCapture(os.environ.get('PROOFS_CONTRACT_OUTPUT'), binary)
+fixture_token = 'f' * 64
+contract_aeneas_version = None
 reports = {}
 history = {}
 keys = {}
@@ -44,11 +48,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
     def do_GET(self):
-        assert self.headers.get('Authorization') == 'Bearer fixture-token'
+        assert self.headers.get('Authorization') == 'Bearer ' + fixture_token
         if self.path == '/api/v1/me':
             return self.reply(200, {'user': {'id': 'author'}})
         if self.path == '/api/v1/tools':
-            return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}, {'id': 'creusot', 'name': 'Creusot', 'active': 1}, {'id': 'aeneas', 'name': 'Aeneas', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}, {'id': 'creusot-version', 'tool_id': 'creusot', 'version': '0.9.0', 'selectable': 1}, {'id': 'aeneas-version', 'tool_id': 'aeneas', 'version': 'a' * 40, 'selectable': 1}]})
+            return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}, {'id': 'creusot', 'name': 'Creusot', 'active': 1}, {'id': 'aeneas', 'name': 'Aeneas', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}, {'id': 'creusot-version', 'tool_id': 'creusot', 'version': '0.9.0', 'selectable': 1}, {'id': 'aeneas-version', 'tool_id': 'aeneas', 'version': contract_aeneas_version or 'a' * 40, 'selectable': 1}]})
         if self.path.startswith('/api/v1/resolve-api?'):
             from urllib.parse import parse_qs, urlparse
             path = parse_qs(urlparse(self.path).query)['path'][0].removeprefix('fixture::')
@@ -66,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
         global next_claim, polls, lose_reply, race
         raw = self.rfile.read(int(self.headers['Content-Length']))
         if self.path.endswith('/sarif') or self.path == '/api/v1/runs/prepare':
-            assert self.headers.get('Authorization') == 'Bearer fixture-token'
+            assert self.headers.get('Authorization') == 'Bearer ' + fixture_token
             sarif = json.loads(raw)['runs'][0]
             assert sarif['properties']['proofs']['contracts']
             assert sarif['properties']['proofs']['schemaVersion'] == 2
@@ -75,6 +79,17 @@ class Handler(BaseHTTPRequestHandler):
             assert sarif['versionControlProvenance'][0]['revisionId']
             assert sarif['artifacts'][sarif['invocations'][0]['stdout']['index']]['contents']['text']
             assert not any(a.get('contents') for a in sarif['artifacts'][:-2])
+            ingestion = os.environ.get('PROOFS_CONTRACT_INGESTION_URL')
+            if ingestion:
+                from urllib.request import Request, urlopen
+                from urllib.error import HTTPError
+                request = Request(ingestion + self.path, data=raw, method='POST', headers={
+                    'Authorization': 'Bearer ' + fixture_token, 'Content-Type': 'application/sarif+json'})
+                try:
+                    with urlopen(request, timeout=30) as response:
+                        return self.reply(response.status, json.loads(response.read()))
+                except HTTPError as error:
+                    return self.reply(error.code, json.loads(error.read()))
             bindings = []
             for i, contract in enumerate(sarif['properties']['proofs']['contracts']):
                 path = contract['api_paths'][0]
@@ -90,8 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             assert body['device_code'] == 'fixture-device'
             if polls == 1:
                 return self.reply(400, {'error': 'authorization_pending'})
-            return self.reply(200, {'access_token': 'fixture-token', 'expires_in': 3600})
-        assert self.headers.get('Authorization') == 'Bearer fixture-token'
+            return self.reply(200, {'access_token': fixture_token, 'expires_in': 3600})
+        assert self.headers.get('Authorization') == 'Bearer ' + fixture_token
         if self.path == '/api/v1/tokens/revoke':
             return self.reply(200, {'ok': True})
         if self.path == '/api/v1/publish/prepare':
@@ -163,9 +178,9 @@ with tempfile.TemporaryDirectory() as tmp:
     wrapper.mkdir()
     script = wrapper / 'git'
     # Only fake GitHub's advertised URL. Fetch/ancestry checks use the real local remote.
-    script.write_text('#!/bin/sh\nif [ "$1" = remote ] && [ "$2" = get-url ]; then\n echo https://github.com/fixture/source\nelse\n exec "$TEST_REAL_GIT" "$@"\nfi\n')
+    script.write_text('#!/bin/sh\nif [ "$PWD" = "$TEST_GIT_PROJECT" ] && [ "$1" = remote ] && [ "$2" = get-url ]; then\n echo https://github.com/fixture/source\nelse\n exec "$TEST_REAL_GIT" "$@"\nfi\n')
     script.chmod(0o755)
-    env = dict(os.environ, PATH=str(wrapper) + os.pathsep + os.environ['PATH'], TEST_REAL_GIT=real_git, PROOFS_CONFIG_DIR=str(root / 'credentials'))
+    env = dict(os.environ, PATH=str(wrapper) + os.pathsep + os.environ['PATH'], TEST_REAL_GIT=real_git, TEST_GIT_PROJECT=str(work.resolve()), PROOFS_CONFIG_DIR=str(root / 'credentials'))
     env['XDG_DATA_HOME'] = str(root / 'data')
     # Exercise aliased temporary roots on every Unix runner, including Linux.
     # macOS normally uses /var paths whose canonical form starts /private/var.
@@ -204,10 +219,15 @@ print('Proved (2 files)')
     lake = wrapper / 'lake'
     lake.write_text("""#!/usr/bin/env python3
 import sys,os,json
-if sys.argv[1:2] == ['build']:
+if 'build' in sys.argv[1:]:
     assert '+Proofs' in sys.argv
     if os.getenv('TEST_LAKE_FAIL'): sys.exit(1)
+    __import__('pathlib').Path('.proofs-toolchain/aeneas/backends/lean/.lake/build/lib/lean').mkdir(parents=True,exist_ok=True) if __import__('pathlib').Path('.proofs-toolchain/aeneas').exists() else None
     print('Built Proofs')
+elif sys.argv[1:] == ['env','lean','--version']:
+    print('Lean (version 4.35.0, synthetic wire checker)')
+elif sys.argv[1:] == ['env','printenv','LEAN_PATH']:
+    print(__import__('pathlib').Path('.proofs-toolchain/aeneas/backends/lean/.lake/build/lib/lean').resolve())
 else:
     assert sys.argv[1:] == ['env', 'lean', '--stdin']
     source = sys.stdin.read()
@@ -215,6 +235,10 @@ else:
     assert 'Lean.collectAxioms' in source and 'some (.thmInfo _)' in source
     if os.getenv('TEST_LEAN_FAIL'):
         print('Unapproved axiom in fixture.f_spec: sorryAx');sys.exit(1)
+    extra = __import__('pathlib').Path('contract-lean.json')
+    if extra.exists():
+        for formal in json.loads(extra.read_text()): print('proofs.rs:formal:' + json.dumps(formal))
+        sys.exit(0)
     print('proofs.rs:formal:' + json.dumps({'version':1,'theorem':'fixture.f_spec',
         'module':'Proofs','statement':'True','binders':[],'conclusion':'True',
         'program':None,'program_head':None,'axioms':[],'first_line':2,'last_line':2,
@@ -226,9 +250,11 @@ else:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    def cli(*args, ok=True):
+    def cli(*args, ok=True, case=None):
         output = subprocess.run([binary, 'proofs', '--server', origin, *args], cwd=work, env=env, input='', capture_output=True, text=True, timeout=30)
         assert (output.returncode == 0) == ok, (args, output.stdout, output.stderr)
+        if args[0] == 'run':
+            capture.run(output.stdout + output.stderr, output.returncode == 0, case)
         return output.stdout + output.stderr
 
     def commit_push():
@@ -246,10 +272,10 @@ else:
         assert 'No recorded run' in cli('publish', ok=False)
         assert 'Commit and push' in cli('run', '--', 'cargo', 'kani', ok=False)
         commit_push()
-        cli('run', '--', 'cargo', 'kani')
+        cli('run', '--', 'cargo', 'kani', case='kani')
         assert len(git('worktree', 'list', '--porcelain').split('worktree ')) == 2
         env['TEST_MUTATE_SOURCE'] = '1'
-        assert 'Tracked inputs changed' in cli('run', '--', 'cargo', 'kani', ok=False)
+        assert 'Tracked inputs changed' in cli('run', '--', 'cargo', 'kani', ok=False, case='failed-mutated-source')
         assert (work / 'src/lib.rs').read_text() == source
         assert len(git('worktree', 'list', '--porcelain').split('worktree ')) == 2
         del env['TEST_MUTATE_SOURCE']
@@ -312,7 +338,7 @@ else:
             'pub fn g() {}\n#[trusted] pub fn ignored() {}\n'
             '#[logic] pub fn model(x: u32) -> Int { x@ }\n')
         commit_push()
-        cli('run', '--', 'cargo', 'creusot', 'prove')
+        cli('run', '--', 'cargo', 'creusot', 'prove', case='creusot-annotated')
         cli('publish', '--dry-run')
         assert len(reports) == 1
         cli('publish')
@@ -325,7 +351,7 @@ else:
         config = work / 'proofs.toml'
         config.write_text(config.read_text().replace('target = "annotated"', 'target = "all"'))
         commit_push()
-        cli('run', '--', 'cargo', 'creusot', 'prove')
+        cli('run', '--', 'cargo', 'creusot', 'prove', case='creusot-all')
         cli('publish')
         assert len(reports[2]['claims']) == 2
         assert reports[2]['claims'][1]['precondition'] == 'true'
@@ -370,16 +396,16 @@ else:
             assert git('worktree', 'list', '--porcelain') == original_worktrees
             assert not [p for p in (root / 'real-tmp').iterdir() if p.name != 'xcrun_db']
         env['TEST_LAKE_FAIL'] = '1'
-        assert 'Lake build failed' in cli('run', '--', 'lake', 'build', ok=False)
+        assert 'Lake build failed' in cli('run', '--', 'lake', 'build', ok=False, case='failed-aeneas-build')
         assert_snapshot_cleaned()
         assert 'did not produce publishable' in cli('publish', ok=False)
         del env['TEST_LAKE_FAIL']
         env['TEST_LEAN_FAIL'] = '1'
-        assert 'sorryAx' in cli('run', '--', 'lake', 'build', ok=False)
+        assert 'sorryAx' in cli('run', '--', 'lake', 'build', ok=False, case='failed-aeneas-audit')
         assert_snapshot_cleaned()
         assert 'did not produce publishable' in cli('publish', ok=False)
         del env['TEST_LEAN_FAIL']
-        cli('run', '--', 'lake', 'build')
+        cli('run', '--', 'lake', 'build', case='aeneas-manual')
         assert_snapshot_cleaned()
         cli('publish', '--dry-run')
         cli('publish')
@@ -393,6 +419,91 @@ else:
         assert 'Aeneas proof mappings changed' in cli('publish', ok=False)
         config.write_text(config.read_text().replace("x > 1", "x > 0"))
         assert 'No changes' in cli('publish')
+        # End-to-end wire cases: all bytes come from production record::run.
+        # Restore the root library path; keep the earlier submodule pinned unchanged.
+        manifest.write_text(manifest.read_text().replace('upstream/lib.rs','src/lib.rs'))
+        def lean_entries(theorems, program=None):
+            entries=[{'version':1,'theorem':theorem,'module':'Proofs','statement':'True',
+                      'binders':[],'conclusion':'True','program':program,'program_head':program,
+                      'axioms':[],'first_line':2,'last_line':2,'definitions':[],
+                      'definitions_truncated':False,'translation_rerun':False} for theorem in theorems]
+            (work/'contract-lean.json').write_text(json.dumps(entries))
+            (work/'Proofs.lean').write_text('namespace fixture\n'+'\n'.join('theorem '+t.split('.')[-1]+' : True := by trivial' for t in theorems)+'\nend fixture\n')
+            git('add','contract-lean.json','Proofs.lean')
+        def manual_config(mode, apis):
+            config.write_text('[report]\ntitle="Wire contract fixture"\n[tool]\nname="aeneas"\nversion="'+'a'*40+'"\n'+mode+'\n'+''.join('[[tool.proofs]]\napi='+json.dumps(api)+'\nmodule="Proofs"\ntheorem="fixture.p'+str(i)+'"\nprecondition="true"\n' for i,api in enumerate(apis)))
+            lean_entries(['fixture.p'+str(i) for i in range(len(apis))])
+        (work/'src/lib.rs').write_text('#[derive(Clone)] pub struct Table<const L:usize>;\npub struct Crc<W,I>(W,I);\nimpl Crc<u8,Table<0>> { pub fn checksum(&self)->u8 {0} }\n')
+        manual_config('concrete_api=true',['Crc<u8, Table<0>>::checksum','Table<0>::clone_from'])
+        commit_push(); cli('run','--','lake','build',case='aeneas-concrete')
+        cli('publish','--dry-run')
+        (work/'src/lib.rs').write_text('macro_rules! api { () => { pub fn f() {} } }\napi!();\n')
+        manual_config('expand_api=true',['f'])
+        commit_push(); cli('run','--','lake','build',case='aeneas-expanded')
+        cli('publish','--dry-run')
+        (work/'src/lib.rs').write_text('pub fn f() {}\n')
+        manual_config('', ['f','f'])
+        commit_push(); cli('run','--','lake','build',case='aeneas-many-theorems')
+        cli('publish','--dry-run')
+        manual_config('', ['f']*200)
+        commit_push();cli('run','--','lake','build',case='aeneas-claim-limit')
+        cli('publish','--dry-run')
+        manual_config('', ['f']*201)
+        commit_push()
+        assert 'At most 200' in cli('run','--','lake','build',ok=False)
+        config.write_text('[report]\ntitle="Manifest wire fixture"\n[tool]\nname="aeneas"\nversion="'+'a'*40+'"\nproof_modules=["Proofs"]\ntranslation_manifest="translation.json"\n')
+        lean_entries(['fixture.manifest_spec'],'fixture.f')
+        (work/'Generated.lean').write_text('def fixture.f : Unit := ()\n')
+        (work/'translation.json').write_text(json.dumps({'crate':'fixture','aeneas_version':'synthetic','charon_version':'synthetic','functions':[{'def_id':19,'lean_name':'fixture.f','rust_name':'fixture::f','lean_file':'Generated.lean','is_local':True,'source':{'file':'src/lib.rs','begin_line':1,'end_line':1}}]}))
+        git('add','Generated.lean','translation.json')
+        commit_push(); cli('run','--','lake','build',case='aeneas-manifest')
+        cli('publish','--dry-run')
+        valid_translation=(work/'translation.json').read_text()
+        invalid_translation=json.loads(valid_translation);del invalid_translation['functions'][0]['def_id']
+        (work/'translation.json').write_text(json.dumps(invalid_translation))
+        git('add','translation.json');commit_push()
+        assert 'def_id' in cli('run','--','lake','build',ok=False,case='failed-aeneas-manifest')
+        (work/'translation.json').write_text(valid_translation)
+        git('add','translation.json')
+        # Exercise toolchain provenance serialization with a tiny local Git source.
+        # No real tool is built here; the verifier remains explicitly synthetic.
+        tool_repo=root/'contract-aeneas'
+        (tool_repo/'backends/lean').mkdir(parents=True)
+        (tool_repo/'charon-pin').write_text('b'*40+'\n')
+        (tool_repo/'backends/lean/lean-toolchain').write_text('leanprover/lean4:v4.35.0\n')
+        (tool_repo/'backends/lean/lakefile.lean').write_text('package aeneas\n')
+        (tool_repo/'backends/lean/Aeneas.lean').write_text('def contract_original := 0\n')
+        for args in [('init','-q'),('config','user.name','Test'),('config','user.email','test@example.test'),('add','.'),('commit','-qm','Synthetic source')]:
+            subprocess.run([real_git,'-C',str(tool_repo),*args],check=True,capture_output=True)
+        contract_aeneas_version=subprocess.check_output([real_git,'-C',str(tool_repo),'rev-parse','HEAD'],text=True).strip()
+        (tool_repo/'backends/lean/Aeneas.lean').write_text('def contract_original := 0\ndef contract_patch := 1\n')
+        patch_bytes=subprocess.check_output([real_git,'-C',str(tool_repo),'diff','--binary','--full-index','HEAD','--'])
+        (work/'aeneas-contract.patch').write_bytes(patch_bytes)
+        subprocess.run([real_git,'-C',str(tool_repo),'checkout','--','.'],check=True)
+        env.update(GIT_CONFIG_COUNT='2',GIT_CONFIG_KEY_1='url.'+str(tool_repo)+'.insteadOf',GIT_CONFIG_VALUE_1='https://github.com/AeneasVerif/aeneas')
+        (work/'.gitignore').write_text((work/'.gitignore').read_text()+'/.proofs-toolchain/\n')
+        manual_config('patch="aeneas-contract.patch"',['f'])
+        config.write_text(config.read_text().replace('a'*40,contract_aeneas_version))
+        (work/'lake-manifest.json').write_text(json.dumps({'packages':[{'name':'aeneas','type':'path','dir':'.proofs-toolchain/aeneas/backends/lean'}]}))
+        git('add','aeneas-contract.patch','lake-manifest.json')
+        commit_push();cli('run','--','lake','build',case='aeneas-toolchain')
+        cli('publish','--dry-run')
+        config.write_text('[report]\ntitle="Structural wire fixture"\n[tool]\nname="kani"\nversion="0.66.0"\n')
+        (work/'src/lib.rs').write_text('pub trait Read { fn read(&self); }\nimpl Read for [u8;32] { fn read(&self) {} }\n#[cfg(kani)]\n#[kani::proof_for_contract(<[u8;32] as Read>::read)]\nfn check_read() {}\n')
+        commit_push(); cli('run','--','cargo','kani',case='kani-structural')
+        cli('publish','--dry-run')
+        (work/'src/lib.rs').write_text('use std::fmt::Display;\npub struct S;\nimpl Display for S { fn fmt(&self, _: &mut std::fmt::Formatter) -> std::fmt::Result { Ok(()) } }\n#[cfg(kani)]\n#[kani::proof_for_contract(<S as Display>::fmt)]\nfn check_display() {}\n')
+        commit_push(); cli('run','--','cargo','kani',case='kani-aliases')
+        cli('publish','--dry-run')
+        (work/'src/lib.rs').write_text(source)
+        (work/'dep/src').mkdir(parents=True)
+        (work/'dep/Cargo.toml').write_text('[package]\nname="contract-dep"\nversion="0.1.0"\nedition="2021"\n')
+        (work/'dep/src/lib.rs').write_text('pub fn dependency() {}\n')
+        manifest.write_text(manifest.read_text()+'\n[dependencies]\ncontract-dep={path="dep"}\n')
+        git('add','dep')
+        commit_push(); cli('run','--','cargo','kani',case='kani-dependency')
+        cli('publish','--dry-run')
+        capture.finish()
         cli('logout')
         assert 'Not logged in' in cli('publish', ok=False)
         print('End-to-end: login, SARIF-only recording, published source, dry-run, create, no-op, conflict, force, removal, restore, retry, Creusot targets/claims/evidence, Aeneas Lean recording/failures/mappings, logout passed')

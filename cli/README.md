@@ -544,3 +544,12 @@ paths. Explicit mappings are checked before rebuilding Lean.
 Compiler expansion also enumerates inherited defaults from active traits defined
 in the selected crate. Explicit implementations replace defaults; private traits
 and unknown external defaults are excluded. This supplies callable paths only.
+
+### Export/ingestion compatibility checks
+
+`npm run test:cli-contract` (from the repository root after building the CLI)
+requires production CLI exports to pass production server ingestion. It covers
+concrete and inherited APIs, manifest/manual proofs, toolchain provenance and
+failed runs. CI also checks the packaged binary and blocks release on a mismatch.
+See `docs/development.md` for corpus capture and coverage rules. Verifier fixtures
+in this gate are synthetic; real Lean checks are a separate requirement.

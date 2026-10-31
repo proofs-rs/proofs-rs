@@ -75,7 +75,17 @@ jobs:
         run: cargo test --manifest-path cli/Cargo.toml --locked aeneas::tests::real_ -- --ignored
       - run: cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
       - run: cargo build --manifest-path cli/Cargo.toml --locked
-      - run: python3 cli/tests/e2e.py cli/target/debug/cargo-proofs
+      - name: Require CLI export to server ingestion compatibility
+        env:
+          PROOFS_CONTRACT_OUTPUT: ${{ runner.temp }}/proofs-release-contract
+        run: |
+          npm run test:cli-contract
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recording-release-contract
+          path: ${{ runner.temp }}/proofs-release-contract
+          if-no-files-found: ignore
       - run: python3 cli/tests/preview.py cli/target/debug/cargo-proofs
       - run: cargo publish --manifest-path cli/Cargo.toml --dry-run --locked --registry crates-io
       - name: Create persistent release archive
