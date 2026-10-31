@@ -1,3 +1,10 @@
+import { exactCargoVersion } from "./releases";
+import {
+  recordBindings,
+  observationStatements,
+  storedBindings,
+} from "./recorded-apis";
+import { recordedAPI } from "./recorded-api-sql";
 import {
   resolveContract,
   checkAnchor,
@@ -138,6 +145,11 @@ export function readRecord(sarif: any) {
     dependencies: p.dependencies,
     toolchain: p.toolchain as Toolchain | undefined,
   };
+  if (
+    !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(b.crate) ||
+    !exactCargoVersion(b.version)
+  )
+    throw new Fault(400, "exact_crate_version_required");
   if (p.aeneas?.source !== undefined)
     throw new Fault(
       400,
@@ -200,7 +212,9 @@ export function readRecord(sarif: any) {
       typeof contract.harness !== "string" ||
       !Array.isArray(contract.api_paths) ||
       !contract.api_paths.length ||
-      contract.api_paths.some((p: any) => typeof p !== "string") ||
+      contract.api_paths.some(
+        (p: any) => typeof p !== "string" || !p.trim() || /[\x00-\x1f]/.test(p),
+      ) ||
       typeof contract.precondition !== "string"
     )
       throw new Fault(400, "invalid_run_contract");
@@ -278,16 +292,87 @@ async function readStored(c: Ctx, run: any) {
   if (!object) throw new Fault(503, "sarif_unavailable");
   return object;
 }
+async function registeredTool(c: Ctx, sarif: any) {
+  const driver = sarif.runs[0].tool.driver;
+  const tv = await one(
+    c.env.DB,
+    "SELECT v.id FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE lower(t.name)=lower(?) AND v.version=? AND v.selectable=1 AND t.active=1",
+    driver.name,
+    driver.name.toLowerCase() === "aeneas"
+      ? driver.version.toLowerCase()
+      : driver.version,
+  );
+  if (!tv) throw new Fault(400, "tool_version_unavailable");
+  return tv;
+}
+async function sarifBytes(c: Ctx, supplied?: ArrayBuffer) {
+  const bytes = supplied ?? (await c.req.arrayBuffer());
+  if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
+    throw new Fault(413, "artifact_too_large");
+  let sarif;
+  try {
+    sarif = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Fault(400, "invalid_sarif");
+  }
+  const record = readRecord(sarif);
+  const tv = await registeredTool(c, sarif);
+  return { bytes, sarif, record, tv };
+}
+runs.post(
+  "/prepare",
+  ...operation(
+    "Validate recorded evidence and preview exact API bindings",
+    S.preparedRun,
+    {
+      tags: ["Runs"],
+      body: S.sarif,
+      raw: true,
+      media: "application/sarif+json",
+      auth: "user",
+      write: true,
+      errors: [400, 409, 413],
+      description:
+        "Validates the same immutable SARIF as upload, without storing evidence, creating API items, importing rustdoc, or publishing a report. Recorded API metadata is an author observation, not an independent rustdoc assertion.",
+    },
+  ),
+  async (c) => {
+    const { bytes, record } = await sarifBytes(c);
+    const sha = await digest(bytes);
+    const saved = await one(
+      c.env.DB,
+      "SELECT author_id,sha256 FROM verification_runs WHERE id=?",
+      record.id,
+    );
+    if (
+      saved &&
+      (saved.author_id !== requireUser(c).id || saved.sha256 !== sha)
+    )
+      throw new Fault(409, "immutable_run");
+    const apis = await recordBindings(c.env.DB, record);
+    const current = await one(
+      c.env.DB,
+      "SELECT author_id,sha256 FROM verification_runs WHERE id=?",
+      record.id,
+    );
+    if (
+      current &&
+      (current.author_id !== requireUser(c).id || current.sha256 !== sha)
+    )
+      throw new Fault(409, "immutable_run");
+    return c.json({ id: record.id, sha256: sha, apis });
+  },
+);
 runs.post(
   "/:run/sarif",
-  ...operation("Upload a recorded verification run", S.uploadedRun, {
+  ...operation("Upload a recorded verification run", S.preparedRun, {
     tags: ["Runs"],
     params: { run: S.runId },
     body: S.sarif,
     raw: true,
     media: "application/sarif+json",
     status: 201,
-    additionalResponses: { 200: S.uploadedRun },
+    additionalResponses: { 200: S.preparedRun },
     auth: "user",
     write: true,
     errors: [400, 404, 409, 413, 428, 429],
@@ -309,26 +394,17 @@ runs.post(
     if (existing) {
       if (existing.author_id !== u.id || existing.sha256 !== sha)
         throw new Fault(409, "immutable_run");
-      return c.json({ id: run, sha256: sha }, 200);
+      const record = readRecord(JSON.parse(new TextDecoder().decode(bytes)));
+      const bindings = await recordBindings(c.env.DB, record);
+      await batch(c.env.DB, observationStatements(c.env, record, bindings));
+      return c.json(
+        { id: run, sha256: sha, apis: await storedBindings(c.env.DB, run) },
+        200,
+      );
     }
-    let sarif;
-    try {
-      sarif = JSON.parse(new TextDecoder().decode(bytes));
-    } catch {
-      throw new Fault(400, "invalid_sarif");
-    }
-    const record = readRecord(sarif);
+    const { record, tv } = await sarifBytes(c, bytes);
     if (record.id !== run) throw new Fault(400, "run_id_mismatch");
-    const driver = sarif.runs[0].tool.driver;
-    const tv = await one(
-      c.env.DB,
-      "SELECT v.id FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE lower(t.name)=lower(?) AND v.version=? AND v.selectable=1 AND t.active=1",
-      driver.name,
-      driver.name.toLowerCase() === "aeneas"
-        ? driver.version.toLowerCase()
-        : driver.version,
-    );
-    if (!tv) throw new Fault(400, "tool_version_unavailable");
+    const bindings = await recordBindings(c.env.DB, record);
     // Each attempt owns its object, so compensation cannot delete a concurrent winner.
     const key = `runs/${u.id}/${run}/${crypto.randomUUID()}.sarif.json`;
     await c.env.ARCHIVE.put(key, bytes, {
@@ -353,6 +429,7 @@ runs.post(
             ? null
             : JSON.stringify(record.toolchain),
         ),
+        ...observationStatements(c.env, record, bindings),
         ...record.dependencies.map((d: any) =>
           stmt(
             c.env.DB,
@@ -373,11 +450,18 @@ runs.post(
       );
       if (saved?.r2_key !== key) await c.env.ARCHIVE.delete(key);
       if (saved?.author_id === u.id && saved.sha256 === sha)
-        return c.json({ id: run, sha256: sha });
+        return c.json({
+          id: run,
+          sha256: sha,
+          apis: await storedBindings(c.env.DB, run),
+        });
       if (saved) throw new Fault(409, "immutable_run");
       throw error;
     }
-    return c.json({ id: run, sha256: sha }, 201);
+    return c.json(
+      { id: run, sha256: sha, apis: await storedBindings(c.env.DB, run) },
+      201,
+    );
   },
 );
 runs.get(
@@ -532,6 +616,41 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
     ) {
       throw new Fault(400, "claim_not_in_recorded_run");
     }
+  }
+  for (const claim of v.claims) {
+    const observed = await one(
+      c.env.DB,
+      `SELECT 1 FROM api_items a WHERE a.id=? AND ${recordedAPI()}`,
+      claim.api_item_id,
+    );
+    if (!observed) continue;
+    let bound = false;
+    for (const [rid, sarif] of records) {
+      for (const [
+        index,
+        contract,
+      ] of sarif.runs[0].properties.proofs.contracts.entries()) {
+        if (!contract.api_paths.includes(claim.display_path)) continue;
+        if (
+          claim.evidence_ref
+            ? claim.evidence_ref.run_id !== rid ||
+              claim.evidence_ref.harness !== contract.harness
+            : contract.formal || contract.precondition !== claim.precondition
+        )
+          continue;
+        if (
+          await one(
+            c.env.DB,
+            "SELECT 1 FROM run_api_observations WHERE run_id=? AND contract_index=? AND api_item_id=?",
+            rid,
+            index,
+            claim.api_item_id,
+          )
+        )
+          bound = true;
+      }
+    }
+    if (!bound) throw new Fault(400, "recorded_api_not_in_run");
   }
   v.run_ids = b.run_ids;
 }

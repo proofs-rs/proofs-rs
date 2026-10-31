@@ -1,3 +1,4 @@
+import { apiOrigin, apiObservation, visibleAPI } from "./recorded-api-sql";
 import { zulipEvent } from "./zulip";
 import { findings, validateFinding, findingStatements } from "./findings";
 import { decodeEvidence } from "./core";
@@ -328,7 +329,7 @@ api.get(
     const data = await listing(
       c,
       `SELECT cr.*,
-    (SELECT COUNT(DISTINCT a.display_path) FROM api_items a JOIN releases rel ON rel.id=a.release_id WHERE rel.crate_id=cr.id AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})) api_count,
+    (SELECT COUNT(DISTINCT a.display_path) FROM api_items a JOIN releases rel ON rel.id=a.release_id WHERE rel.crate_id=cr.id AND ${visibleAPI()} AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})) api_count,
     (SELECT COUNT(*) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) report_count,
     (SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport} AND ${latest}) claim_count,
     (SELECT MAX(p.updated_at) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) updated_at
@@ -448,17 +449,17 @@ api.get(
     const count = `(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND ${activeReport} AND ${latest})`;
     const items = await rows(
       c.env.DB,
-      `SELECT a.*,m.category,m.trait_path,m.self_type,m.method_name,m.is_blanket,
+      `SELECT a.*,${apiOrigin()} origin,m.category,m.trait_path,m.self_type,m.method_name,m.is_blanket,
       ${count} claim_count
      FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id
      LEFT JOIN api_item_metadata m ON m.api_item_id=a.id
-     WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ? ORDER BY a.display_path,a.id`,
+     WHERE cr.name=? AND rel.version=? AND ${visibleAPI()} AND a.display_path LIKE ? ORDER BY a.display_path,a.id`,
       c.req.param("name"),
       c.req.param("version"),
       "%" + (c.req.query("q") || "") + "%",
     );
     return c.json({
-      items,
+      items: items.map(apiObservation),
       next_cursor: null,
     });
   },
@@ -491,11 +492,11 @@ api.get(
   async (c) => {
     const item = await one(
       c.env.DB,
-      `SELECT a.*,cr.name crate,rel.version,rel.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE a.id=?`,
+      `SELECT a.*,${apiOrigin()} origin,cr.name crate,rel.version,rel.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE a.id=? AND ${visibleAPI()}`,
       c.req.param("id"),
     );
     if (!item) throw new Fault(404, "api_not_found");
-    return c.json(item);
+    return c.json(apiObservation(item));
   },
 );
 api.get(
@@ -660,9 +661,10 @@ const optionalURL = (v: any) => (text(v, "Evidence URL", 1000) ? url(v) : "");
 async function validate(c: Ctx, b: any, existing?: any) {
   const rel = await one(
     c.env.DB,
-    "SELECT rel.*,cr.name crate FROM releases rel JOIN crates cr ON cr.id=rel.crate_id JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE cr.name=? AND rel.version=?",
+    "SELECT rel.*,cr.name crate FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND rel.version=? AND (EXISTS(SELECT 1 FROM doc_snapshots ds WHERE ds.release_id=rel.id) OR EXISTS(SELECT 1 FROM verification_runs vr WHERE vr.crate=cr.name AND vr.version=rel.version AND vr.author_id=?))",
     text(b.crate, "Crate", 100, true),
     text(b.version, "Version", 100, true),
+    requireUser(c).id,
   );
   if (!rel) throw new Fault(400, "release_not_imported");
   if (existing && existing.release_id !== rel.id)
@@ -706,7 +708,7 @@ async function validate(c: Ctx, b: any, existing?: any) {
         throw new Fault(400, "invalid_claim");
       const a = await one(
         c.env.DB,
-        "SELECT * FROM api_items WHERE id=? AND release_id=?",
+        `SELECT a.*,${apiOrigin()} origin FROM api_items a WHERE a.id=? AND a.release_id=?`,
         text(x.api_item_id, "API", 200, true),
         rel.id,
       );
@@ -753,7 +755,8 @@ async function validate(c: Ctx, b: any, existing?: any) {
         evidence_url,
         limitations: text(x.limitations, "Limitations"),
         display_path: a.display_path,
-        is_unsafe: a.is_unsafe,
+        is_unsafe: a.origin === "recorded" ? null : a.is_unsafe,
+        origin: a.origin,
         signature: a.signature,
       });
     } catch (e) {
@@ -834,7 +837,14 @@ async function validate(c: Ctx, b: any, existing?: any) {
       throw new Fault(400, "invalid_findings");
     v.findings = [];
     for (const input of b.findings)
-      v.findings.push(await validateFinding(c.env.DB, input, rel.id));
+      v.findings.push(
+        await validateFinding(
+          c.env.DB,
+          input,
+          rel.id,
+          v.claims.map((c: any) => c.api_item_id),
+        ),
+      );
   }
   return v;
 }
@@ -1677,7 +1687,7 @@ api.get(
       path = c.req.query("path") || "";
     const a = await one(
       c.env.DB,
-      `SELECT a.id FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE cr.name=? AND r.version=? AND a.display_path IN (?,?)`,
+      `SELECT a.id FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id WHERE cr.name=? AND r.version=? AND ${visibleAPI()} AND a.display_path IN (?,?)`,
       name,
       version,
       path,

@@ -1056,6 +1056,15 @@ fn proved(v: &Value) -> bool {
     false
 }
 
+pub fn observed_api_id(name: &str, version: &str, path: &str) -> Result<String> {
+    Ok(state::digest(&serde_json::to_string(&json!([
+        "recorded-api-v1",
+        name,
+        version,
+        path
+    ]))?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

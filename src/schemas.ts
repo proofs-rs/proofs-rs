@@ -105,7 +105,8 @@ export const apiItem = z
     canonical_key: string,
     display_path: string,
     kind: string,
-    is_unsafe: flag,
+    is_unsafe: flag.nullable(),
+    origin: z.enum(["rustdoc", "recorded"]).optional(),
     signature: string,
     upstream_url: string,
   })
@@ -290,7 +291,8 @@ export const claim = z
     evidence_url: string,
     limitations: string.describe("Displayed as Technical limitations."),
     display_path: string,
-    is_unsafe: flag,
+    is_unsafe: flag.nullable(),
+    origin: z.enum(["rustdoc", "recorded"]).optional(),
     signature: string,
     upstream_url: string,
     author_id: nullableString,
@@ -525,7 +527,8 @@ export const validatedClaim = z.object({
   evidence_url: string,
   limitations: string.describe("Displayed as Technical limitations."),
   display_path: string,
-  is_unsafe: flag,
+  is_unsafe: flag.nullable(),
+  origin: z.enum(["rustdoc", "recorded"]).optional(),
   signature: string,
 });
 export const validatedReport = z.object({
@@ -794,3 +797,14 @@ export const deviceTokenInput = z.object({
 });
 export const userCodeInput = z.object({ user_code: required(20) });
 export { z };
+
+export const preparedRun = uploadedRun.extend({
+  apis: z.array(
+    z.object({
+      contract_index: integer.nonnegative(),
+      api_item_id: string,
+      display_path: string,
+      origin: z.enum(["rustdoc", "recorded"]),
+    }),
+  ),
+});

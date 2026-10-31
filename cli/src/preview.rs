@@ -149,34 +149,47 @@ impl RecordedPreview {
         let mut claims = vec![];
         let mut metadata = BTreeMap::new();
         let mut seen = BTreeSet::new();
-        for (index, contract) in recorded.contracts.iter().enumerate() {
-            let resolved = if items.is_some_and(|i| !i.is_empty()) {
-                api.resolve(
-                    &self.project.name,
-                    &self.project.version,
-                    &contract.api_paths,
-                )
-                .ok()
-            } else {
-                None
-            };
-            let info = resolved
+        for contract in &recorded.contracts {
+            // Match exact aliases in the same order as the server. A saved
+            // binding for this immutable run takes priority over new aliases.
+            let retained = remote
                 .as_ref()
-                .and_then(|(id, _)| items?.iter().find(|i| i["id"] == *id));
+                .and_then(|r| r["claims"].as_array())
+                .and_then(|claims| {
+                    claims.iter().find(|c| {
+                        c["evidence_ref"]["run_id"] == self.run_id
+                            && c["evidence_ref"]["harness"] == contract.harness
+                    })
+                });
+            let info = items.and_then(|items| {
+                retained
+                    .and_then(|c| {
+                        items.iter().find(|i| {
+                            i["id"] == c["api_item_id"]
+                                && contract.api_paths.iter().any(|p| i["display_path"] == *p)
+                        })
+                    })
+                    .or_else(|| {
+                        contract
+                            .api_paths
+                            .iter()
+                            .find_map(|p| items.iter().find(|i| i["display_path"] == *p))
+                    })
+            });
             let (id, info) = if let Some(info) = info {
                 let id = info["id"].as_str().context("Invalid API ID")?.to_owned();
                 (id, info.clone())
             } else {
-                let id = format!("preview-api-{index}");
                 let path = contract
                     .api_paths
                     .first()
                     .cloned()
                     .unwrap_or_else(|| contract.harness.clone());
-                warnings.push(format!("API mapping and signature unverified: {}. Existing claim text cannot be matched without a unique API.", contract.api_paths.join(", ")));
+                let id = record::observed_api_id(&self.project.name, &self.project.version, &path)?;
+                warnings.push(format!("API mapping and signature unverified by rustdoc: {path}. The exact callable name is retained from the verification record; signature and safety are not recorded."));
                 (
                     id,
-                    json!({"display_path":path,"signature":"Signature unavailable (API unverified)","kind":"function","is_unsafe":0,"unverified":true}),
+                    json!({"display_path":path,"signature":"","kind":"callable","origin":"recorded","is_unsafe":null,"unverified":true}),
                 )
             };
             metadata.insert(id.clone(), info);

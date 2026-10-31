@@ -65,17 +65,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global next_claim, polls, lose_reply, race
         raw = self.rfile.read(int(self.headers['Content-Length']))
-        if self.path.endswith('/sarif'):
+        if self.path.endswith('/sarif') or self.path == '/api/v1/runs/prepare':
             assert self.headers.get('Authorization') == 'Bearer fixture-token'
             sarif = json.loads(raw)['runs'][0]
             assert sarif['properties']['proofs']['contracts']
             assert sarif['properties']['proofs']['schemaVersion'] == 2
             assert isinstance(sarif['properties']['proofs']['dependencies'], list)
-            assert sarif['automationDetails']['guid'] in self.path
+            assert self.path == '/api/v1/runs/prepare' or sarif['automationDetails']['guid'] in self.path
             assert sarif['versionControlProvenance'][0]['revisionId']
             assert sarif['artifacts'][sarif['invocations'][0]['stdout']['index']]['contents']['text']
             assert not any(a.get('contents') for a in sarif['artifacts'][:-2])
-            return self.reply(201, {'ok': True})
+            bindings = []
+            for i, contract in enumerate(sarif['properties']['proofs']['contracts']):
+                path = contract['api_paths'][0]
+                bindings.append({'contract_index': i, 'api_item_id': 'api-'+path.removeprefix('fixture::'), 'display_path': path, 'origin': 'rustdoc'})
+            return self.reply(200 if self.path.endswith('/prepare') else 201, {'id': sarif['automationDetails']['guid'], 'sha256': 'fixture', 'apis': bindings})
         body = json.loads(raw)
         assert not self.path.startswith('/api/v1/runs/'), 'Run registration must be one SARIF upload'
         if self.path == '/auth/device/code':

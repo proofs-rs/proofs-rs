@@ -1511,9 +1511,10 @@ test("report list filters by keyword, tool and author", async () => {
     filterDOM.window.document.querySelector<HTMLFormElement>(
       ".report-filters",
     )!;
-  const toolSelect = form.querySelector(
-    'select[name="tool"]',
-  )! as unknown as { value: string; dispatchEvent(event: Event): boolean };
+  const toolSelect = form.querySelector('select[name="tool"]')! as unknown as {
+    value: string;
+    dispatchEvent(event: Event): boolean;
+  };
   form.querySelector<HTMLInputElement>('[name="q"]')!.value = "verification";
   form.querySelector<HTMLInputElement>('[name="author"]')!.value = "demo_mira";
   const submissions: string[] = [];
@@ -5279,4 +5280,550 @@ test("Zulip leases, retry limits, permanent errors and rollback", async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+// Only callable names from the CRC recordings are retained here; the compact
+// fixture is not evidence of a Lean run. The optional test below uses original SARIF.
+function callableRecord(rid: string, paths: string[], formal = false) {
+  const sarif: any = recordedSarif(
+    rid,
+    formal ? ["lake", "build"] : ["cargo", "kani"],
+  );
+  const r = sarif.runs[0];
+  r.properties.proofs.contracts = paths.map((path, i) => {
+    const harness = formal ? `Proofs.p${i}` : `check_${i}`;
+    const source = { file: "Proofs.lean", first_line: 1, last_line: 2 };
+    return {
+      harness,
+      api_paths: [path],
+      precondition: formal ? "" : "true",
+      ...source,
+      ...(formal
+        ? {
+            formal: {
+              version: 1,
+              theorem: harness,
+              module: "Proofs",
+              statement: "True",
+              binders: [],
+              conclusion: "True",
+              program: "sample.f",
+              program_head: "sample.f",
+              axioms: [],
+              mapping: "manual",
+              manifest: null,
+              source,
+              definitions: [],
+              definitions_truncated: false,
+              translation_rerun: false,
+            },
+          }
+        : {}),
+    };
+  });
+  r.results = r.properties.proofs.contracts.map((c: any) => ({
+    kind: "pass",
+    ...(formal ? { ruleId: "aeneas.lean.theorem" } : {}),
+    message: { text: "checked" },
+    properties: { harness: c.harness },
+  }));
+  return sarif;
+}
+function recordObjects(env: Env) {
+  const objects = new Map<string, any>();
+  env.ARCHIVE = {
+    put: async (key: string, bytes: ArrayBuffer) =>
+      objects.set(key, JSON.parse(new TextDecoder().decode(bytes))),
+    get: async (key: string) =>
+      objects.has(key)
+        ? {
+            json: async () => structuredClone(objects.get(key)),
+            body: new Response(JSON.stringify(objects.get(key))).body,
+          }
+        : null,
+    delete: async (key: string) => objects.delete(key),
+  } as any;
+  return objects;
+}
+test("recorded callable preparation is mutation-free; exact bindings publish without rustdoc and retain identity", async () => {
+  const { env, db, request } = await fixture();
+  const objects = recordObjects(env);
+  const rid = "77777777-7777-4777-8777-777777777777";
+  const paths = [
+    "unimported::Crc<u8, Table<0>>::checksum",
+    "unimported::Table<16>::clone_from",
+    "<[u8; 32] as unimported::Read>::read",
+  ];
+  const sarif = callableRecord(rid, paths);
+  sarif.runs[0].properties.proofs.crate = "unimported";
+  sarif.runs[0].properties.proofs.contracts[0].api_paths.push(
+    "unimported::alias",
+  );
+  const before = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all()
+    .map((x: any) => [
+      x.name,
+      db.prepare(`SELECT COUNT(*) n FROM ${x.name}`).get()!.n,
+    ]);
+  const prepared = await request("/runs/prepare", "POST", sarif);
+  assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+  assert.equal(prepared.body.apis.length, paths.length);
+  assert.deepEqual(
+    prepared.body.apis.map((x: any) => x.display_path),
+    paths,
+  );
+  for (const [table, count] of before)
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) n FROM ${table}`).get()!.n,
+      count,
+      table,
+    );
+  assert.equal(objects.size, 0);
+  const uploaded = await request(`/runs/${rid}/sarif`, "POST", sarif);
+  assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+  assert.deepEqual(uploaded.body.apis, prepared.body.apis);
+  assert.deepEqual(
+    (await request(`/runs/${rid}/sarif`, "POST", sarif)).body,
+    uploaded.body,
+  );
+  const api = uploaded.body.apis[0].api_item_id;
+  assert.equal((await request(`/apis/${api}`)).status, 404);
+  assert.equal(
+    (await request("/crates/unimported/1.0.0/apis")).body.items.length,
+    0,
+  );
+  assert.equal(
+    (
+      await request(
+        `/resolve-api?crate=unimported&version=1.0.0&path=${encodeURIComponent(paths[0])}`,
+      )
+    ).status,
+    404,
+  );
+  const body = {
+    ...structuredClone(reportInput),
+    crate: "unimported",
+    run_ids: [rid],
+    claims: uploaded.body.apis.map((b: any) => ({
+      ...reportInput.claims[0],
+      api_item_id: b.api_item_id,
+    })),
+  };
+  const published = await request("/reports", "POST", body);
+  assert.equal(published.status, 201, JSON.stringify(published.body));
+  const detail = await request(`/apis/${api}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.origin, "recorded");
+  assert.equal(detail.body.is_unsafe, null);
+  assert.equal(detail.body.signature, "");
+  assert.equal(detail.body.upstream_url, "");
+  assert.equal(
+    (await request("/crates/unimported/1.0.0/apis")).body.items.length,
+    3,
+  );
+  const current = (await request(`/reports/${published.body.id}`)).body;
+  const other = structuredClone(sarif);
+  const otherID = "88888888-8888-4888-8888-888888888888";
+  other.runs[0].automationDetails.guid = otherID;
+  const next = await request(`/runs/${otherID}/sarif`, "POST", other);
+  assert.deepEqual(next.body.apis, uploaded.body.apis);
+  const revision = await request(
+    `/reports/${published.body.id}/revisions`,
+    "POST",
+    {
+      ...body,
+      run_ids: [otherID],
+      expected_revision: current.revision_no,
+      claims: current.claims,
+    },
+  );
+  assert.equal(revision.status, 201, JSON.stringify(revision.body));
+  assert.deepEqual(
+    (await request(`/reports/${published.body.id}`)).body.claims.map(
+      (c: any) => c.id,
+    ),
+    current.claims.map((c: any) => c.id),
+  );
+  assert.equal(
+    (await request("/reports/validate", "POST", body, "bob")).status,
+    400,
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM import_jobs").get()!.n, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM doc_snapshots").get()!.n, 1);
+});
+test("recorded callable preparation retains exact rustdoc IDs and rejects invalid or unowned evidence", async () => {
+  const { env, db, request } = await fixture();
+  recordObjects(env);
+  const rid = "99999999-9999-4999-8999-999999999999";
+  const sarif = callableRecord(rid, ["sample::safe"]);
+  assert.equal(
+    (await request("/runs/prepare", "POST", sarif)).body.apis[0].api_item_id,
+    "safe",
+  );
+  const aliases = structuredClone(sarif);
+  aliases.runs[0].properties.proofs.contracts[0].api_paths = [
+    "sample::first_alias_missing",
+    "sample::safe",
+  ];
+  const aliasBinding = (await request("/runs/prepare", "POST", aliases)).body
+    .apis[0];
+  assert.equal(aliasBinding.api_item_id, "safe");
+  assert.equal(aliasBinding.display_path, "sample::safe");
+  db.prepare(
+    "INSERT INTO api_items VALUES('display',1,?,?,'method',0,'pub fn fmt()','https://docs.rs')",
+  ).run(
+    "<sample::S as core::fmt::Display>::fmt",
+    "<sample::S as core::fmt::Display>::fmt",
+  );
+  aliases.runs[0].properties.proofs.contracts[0].api_paths = [
+    "<sample::S as Display>::fmt",
+    "<sample::S as core::fmt::Display>::fmt",
+  ];
+  assert.equal(
+    (await request("/runs/prepare", "POST", aliases)).body.apis[0].api_item_id,
+    "display",
+  );
+
+  for (const mutate of [
+    (s: any) => (s.runs[0].results[0].kind = "fail"),
+    (s: any) => (s.runs[0].invocations[0].exitCode = 1),
+    (s: any) => (s.runs[0].versionControlProvenance[0].revisionId = "HEAD"),
+    (s: any) => (s.runs[0].properties.proofs.contracts[0].api_paths = [""]),
+    (s: any) => (s.runs[0].tool.driver.version = "unknown"),
+    (s: any) => (s.runs[0].properties.proofs.crate = "bad/name"),
+    (s: any) => (s.runs[0].properties.proofs.version = "not-semver"),
+  ]) {
+    const invalid = structuredClone(sarif);
+    mutate(invalid);
+    assert.equal((await request("/runs/prepare", "POST", invalid)).status, 400);
+    assert.equal(
+      (await request(`/runs/${rid}/sarif`, "POST", invalid)).status,
+      400,
+    );
+  }
+  assert.equal(
+    (await request(`/runs/${rid}/sarif`, "POST", sarif)).status,
+    201,
+  );
+  assert.equal(
+    (await request("/runs/prepare", "POST", sarif, "bob")).status,
+    409,
+  );
+  const changed = structuredClone(sarif);
+  changed.runs[0].properties.proofs.contracts[0].api_paths = ["sample::forged"];
+  assert.equal((await request("/runs/prepare", "POST", changed)).status, 409);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM api_item_provenance").get()!.n,
+    0,
+  );
+});
+test("all 96 CRC callable spellings and formal references survive preparation, upload and report validation", async () => {
+  const paths = JSON.parse(
+    readFileSync(
+      new URL("../fixtures/crc-3.4.0-recorded-api-paths.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  for (const [profile, apis] of Object.entries(paths)) {
+    const { env, db, request } = await fixture();
+    recordObjects(env);
+    const tv = db
+      .prepare("SELECT id,version FROM tool_versions WHERE tool_id='aeneas'")
+      .get()!;
+    const rid = crypto.randomUUID();
+    const sarif = callableRecord(rid, apis as string[], true);
+    sarif.runs[0].tool.driver = { name: "aeneas", version: tv.version };
+    sarif.runs[0].properties.proofs.crate = "crc";
+    sarif.runs[0].properties.proofs.version = "3.4.0";
+    const prepared = await request("/runs/prepare", "POST", sarif);
+    assert.equal(prepared.status, 200, profile + JSON.stringify(prepared.body));
+    assert.equal(prepared.body.apis.length, profile === "default" ? 21 : 75);
+    assert.deepEqual(
+      prepared.body.apis.map((a: any) => a.display_path),
+      apis,
+    );
+    const uploaded = await request(`/runs/${rid}/sarif`, "POST", sarif);
+    assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+    const body = {
+      ...structuredClone(reportInput),
+      crate: "crc",
+      version: "3.4.0",
+      tool_version_id: tv.id,
+      run_ids: [rid],
+      claims: uploaded.body.apis.map((a: any, i: number) => ({
+        ...reportInput.claims[0],
+        api_item_id: a.api_item_id,
+        precondition: "",
+        evidence_ref: {
+          run_id: rid,
+          harness: sarif.runs[0].properties.proofs.contracts[i].harness,
+        },
+      })),
+    };
+    const validated = await request("/reports/validate", "POST", body);
+    assert.equal(validated.status, 200, JSON.stringify(validated.body));
+    const published = await request("/reports", "POST", body);
+    assert.equal(published.status, 201, JSON.stringify(published.body));
+    for (const c of (await request(`/reports/${published.body.id}`)).body
+      .claims) {
+      const detail = await request(`/claims/${c.id}`);
+      assert.equal(detail.status, 200);
+      assert.equal(detail.body.formal_evidence.theorem, c.evidence_ref.harness);
+      assert.equal(detail.body.origin, "recorded");
+      assert.equal(detail.body.is_unsafe, null);
+    }
+    const forged = structuredClone(body);
+    forged.claims[0].evidence_ref.harness = "Proofs.absent";
+    assert.equal(
+      (await request("/reports/validate", "POST", forged)).status,
+      400,
+    );
+    const invalid = structuredClone(sarif);
+    invalid.runs[0].automationDetails.guid = crypto.randomUUID();
+    invalid.runs[0].properties.proofs.contracts[0].formal.axioms = ["sorryAx"];
+    assert.equal((await request("/runs/prepare", "POST", invalid)).status, 400);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM import_jobs").get()!.n, 0);
+  }
+});
+test(
+  "original CRC SARIF records are accepted without a rustdoc catalogue",
+  { skip: !process.env.PROOFS_CRC_RECORDS },
+  async () => {
+    const records = JSON.parse(
+      readFileSync(process.env.PROOFS_CRC_RECORDS!, "utf8"),
+    );
+    for (const metadata of Object.values(records) as any[]) {
+      const { env, db, request } = await fixture();
+      recordObjects(env);
+      const sarif = JSON.parse(readFileSync(metadata.sarif, "utf8"));
+      const r = sarif.runs[0];
+      const rid = r.automationDetails.guid;
+      const tv = db
+        .prepare("SELECT id,version FROM tool_versions WHERE tool_id='aeneas'")
+        .get()!;
+      assert.equal(tv.version, r.tool.driver.version);
+      const prepared = await request("/runs/prepare", "POST", sarif);
+      assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+      assert.equal(prepared.body.apis.length, metadata.contracts);
+      const upload = await request(`/runs/${rid}/sarif`, "POST", sarif);
+      assert.equal(upload.status, 201, JSON.stringify(upload.body));
+      const validated = await request("/reports/validate", "POST", {
+        ...reportInput,
+        crate: r.properties.proofs.crate,
+        version: r.properties.proofs.version,
+        tool_version_id: tv.id,
+        run_ids: [rid],
+        claims: upload.body.apis.map((a: any, i: number) => ({
+          ...reportInput.claims[0],
+          api_item_id: a.api_item_id,
+          precondition: "",
+          evidence_ref: {
+            run_id: rid,
+            harness: r.properties.proofs.contracts[i].harness,
+          },
+        })),
+      });
+      assert.equal(validated.status, 200, JSON.stringify(validated.body));
+      assert.equal(
+        db.prepare("SELECT COUNT(*) n FROM import_jobs").get()!.n,
+        0,
+      );
+    }
+  },
+);
+
+test("recorded APIs upgrade to trusted rustdoc metadata without changing IDs or being downgraded by retries", async () => {
+  const { env, db, request } = await fixture();
+  recordObjects(env);
+  const rid = crypto.randomUUID();
+  const sarif = callableRecord(rid, ["sample::new_unsafe"]);
+  const uploaded = await request(`/runs/${rid}/sarif`, "POST", sarif);
+  assert.equal(uploaded.status, 201);
+  const id = uploaded.body.apis[0].api_item_id;
+  assert.equal((await request(`/apis/${id}`)).status, 404);
+  const doc = {
+    format_version: 61,
+    crate_version: "1.0.0",
+    root: 0,
+    index: {
+      0: { name: "sample", inner: { module: { items: [1] } } },
+      1: {
+        name: "new_unsafe",
+        visibility: "public",
+        inner: {
+          function: {
+            header: { is_unsafe: true, abi: "Rust" },
+            generics: { params: [], where_predicates: [] },
+            sig: { inputs: [], output: null },
+          },
+        },
+      },
+    },
+  };
+  (env.ARCHIVE as any).get = async () => ({
+    text: async () => JSON.stringify(doc),
+  });
+  await refreshCatalog(env, 1);
+  const upgraded = await request(`/apis/${id}`);
+  assert.equal(upgraded.status, 200);
+  assert.equal(upgraded.body.origin, "rustdoc");
+  assert.equal(upgraded.body.is_unsafe, 1);
+  assert.match(upgraded.body.signature, /unsafe fn new_unsafe/);
+  assert.match(upgraded.body.upstream_url, /docs.rs/);
+  const retried = await request(`/runs/${rid}/sarif`, "POST", sarif);
+  assert.equal(retried.status, 200);
+  assert.equal(retried.body.apis[0].api_item_id, id);
+  assert.equal(retried.body.apis[0].origin, "rustdoc");
+  assert.equal(
+    db
+      .prepare("SELECT COUNT(*) n FROM api_item_provenance WHERE api_item_id=?")
+      .get(id)!.n,
+    0,
+  );
+});
+
+test(
+  "original CRC CLI dry-runs and publications work against the local Worker without imports",
+  { skip: !process.env.PROOFS_CRC_PROJECT || !process.env.PROOFS_CRC_RECORDS },
+  async () => {
+    const { createServer } = await import("node:http");
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join, resolve } = await import("node:path");
+    const { db, env } = await fixture();
+    const objects = recordObjects(env);
+    const requested: string[] = [];
+    const token = "b".repeat(64);
+    db.prepare(
+      "INSERT INTO api_tokens VALUES('crc-token','alice',?,'publish',?,NULL,?,NULL)",
+    ).run(
+      await hash(token),
+      new Date().toISOString(),
+      new Date(Date.now() + 3600000).toISOString(),
+    );
+    const server = createServer(async (req, res) => {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const bytes = Buffer.concat(chunks);
+        requested.push(`${req.method} ${req.url}`);
+        const response = await app.request(
+          env.APP_ORIGIN + req.url,
+          {
+            method: req.method,
+            headers: req.headers as any,
+            ...(bytes.length ? { body: bytes } : {}),
+          },
+          env,
+        );
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        res.end(Buffer.from(await response.arrayBuffer()));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(String(error));
+      }
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    env.APP_ORIGIN = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
+    const credentials = await mkdtemp(join(tmpdir(), "crc-cli-observations-"));
+    await writeFile(
+      join(credentials, (await hash(env.APP_ORIGIN)) + ".json"),
+      JSON.stringify({
+        access_token: token,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    );
+    const records = JSON.parse(
+      readFileSync(process.env.PROOFS_CRC_RECORDS!, "utf8"),
+    );
+    try {
+      for (const [profile, r] of Object.entries(records) as [string, any][]) {
+        const args = [
+          "proofs",
+          "--server",
+          env.APP_ORIGIN,
+          "publish",
+          "--manifest-path",
+          join(process.env.PROOFS_CRC_PROJECT!, "Cargo.toml"),
+          "--proofs-config",
+          `aeneas/profiles/${profile}/proofs.toml`,
+          "--run",
+          r.run_id,
+        ];
+        const options = {
+          cwd: process.env.PROOFS_CRC_PROJECT,
+          env: {
+            ...process.env,
+            PROOFS_CONFIG_DIR: credentials,
+            RUSTUP_TOOLCHAIN: "1.91.1",
+          },
+          timeout: 60000,
+          maxBuffer: 16 * 1024 * 1024,
+        };
+        const binary =
+          process.env.PROOFS_TEST_CLI ??
+          resolve("cli/target/debug/cargo-proofs");
+        const before = objects.size;
+        const dry = await promisify(execFile)(
+          binary,
+          [...args, "--dry-run"],
+          options,
+        );
+        assert.match(dry.stdout, new RegExp(`${r.contracts} claims`));
+        assert.equal(objects.size, before);
+        const published = await promisify(execFile)(
+          binary,
+          [...args, "--yes"],
+          options,
+        );
+        assert.match(published.stdout, /Published|Created|report/i);
+      }
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM claims").get()!.n, 96);
+      assert.equal(
+        db.prepare("SELECT COUNT(*) n FROM import_jobs").get()!.n,
+        0,
+      );
+      assert.equal(
+        db.prepare("SELECT COUNT(*) n FROM doc_snapshots").get()!.n,
+        1,
+      );
+      assert(requested.some((p) => p === "POST /api/v1/runs/prepare"));
+      assert(
+        !requested.some(
+          (p) => p.includes("/publish/prepare") || p.includes("/resolve-api"),
+        ),
+      );
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(credentials, { recursive: true, force: true });
+    }
+  },
+);
+
+test("recorded Cargo versions preserve build metadata and prereleases", async () => {
+  const { request } = await fixture();
+  for (const version of ["1.0.0+build.1", "1.0.0-alpha.1+build.1"]) {
+    const sarif = callableRecord(crypto.randomUUID(), ["sample::f"]);
+    sarif.runs[0].properties.proofs.version = version;
+    const prepared = await request("/runs/prepare", "POST", sarif);
+    assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+  }
+});
+
+test("recorded callable syntax is not narrowed by a catalogue name limit", async () => {
+  const { request } = await fixture();
+  const path = "sample::" + "a".repeat(11000);
+  const prepared = await request(
+    "/runs/prepare",
+    "POST",
+    callableRecord(crypto.randomUUID(), [path]),
+  );
+  assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
+  assert.equal(prepared.body.apis[0].display_path, path);
 });

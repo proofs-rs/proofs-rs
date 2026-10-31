@@ -249,3 +249,25 @@ test("unsafe precedes fn and nonzero claim counts link to the API claims section
   assert.equal(emptyRow.querySelector(".api-claim-count a"), null);
   dom.window.close();
 });
+
+test("recorded callables retain exact names without fabricating signatures or safety", () => {
+  const path = "sample::Crc<u8, Table<0>>::checksum";
+  const d = new JSDOM(
+    renderAPICatalog(
+      [
+        api({
+          display_path: path,
+          kind: "callable",
+          signature: "",
+          origin: "recorded",
+          is_unsafe: null,
+        }),
+      ],
+      "sample",
+    ),
+  ).window.document;
+  assert.match(d.body.textContent!, /Recorded callables/);
+  assert.match(d.body.textContent!, /Crc<u8, Table<0>>::checksum/);
+  assert.match(d.body.textContent!, /signature and safety not recorded/);
+  assert.equal(d.querySelectorAll(".unsafe,.api-signature").length, 0);
+});

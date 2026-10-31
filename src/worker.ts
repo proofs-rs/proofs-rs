@@ -38,9 +38,11 @@ app.use("*", async (c, next) => {
 });
 app.use("*", async (c, next) =>
   bodyLimit({
-    maxSize: /^\/api\/v1\/runs\/[^/]+\/sarif$/.test(c.req.path)
-      ? 8 * 1024 * 1024
-      : 131072,
+    maxSize:
+      c.req.path === "/api/v1/runs/prepare" ||
+      /^\/api\/v1\/runs\/[^/]+\/sarif$/.test(c.req.path)
+        ? 8 * 1024 * 1024
+        : 131072,
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
   })(c, next),
 );

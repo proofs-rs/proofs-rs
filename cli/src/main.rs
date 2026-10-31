@@ -116,7 +116,7 @@ enum Commands {
     Publish {
         #[command(flatten)]
         project: ProjectArgs,
-        /// Preview recorded evidence without uploading; may prepare the API catalogue.
+        /// Validate recorded evidence and API bindings without storing evidence or publishing.
         #[arg(long)]
         dry_run: bool,
         /// Select a recorded run (defaults to the latest run).

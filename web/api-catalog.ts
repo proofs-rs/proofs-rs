@@ -3,7 +3,8 @@ export interface CatalogAPI {
   display_path: string;
   kind: string;
   signature: string;
-  is_unsafe: number;
+  is_unsafe: number | null;
+  origin?: "rustdoc" | "recorded";
   category?: string | null;
   trait_path?: string | null;
   self_type?: string | null;
@@ -29,6 +30,7 @@ function describe(a: CatalogAPI) {
   return {
     api: a,
     category:
+      (a.origin === "recorded" ? "recorded" : null) ||
       (a.category === "trait" && a.trait_path && a.self_type == null && !legacy
         ? "trait-declaration"
         : a.category) ||
@@ -56,7 +58,9 @@ const kindLabels: Record<string, string> = {
   "trait-declaration": "Trait method",
 };
 export function apiKindLabel(a: CatalogAPI) {
-  return kindLabels[describe(a).category] ?? "Function";
+  return a.origin === "recorded"
+    ? "Recorded callable"
+    : (kindLabels[describe(a).category] ?? "Function");
 }
 // The declaration line of a signature, without any `impl … for …` header.
 function declaration(signature: string) {
@@ -129,7 +133,7 @@ export function renderAPICatalog(
   const label = (a: CatalogAPI, text: string, keyword: string) =>
     `<span class="api-label">${unsafe(!!a.is_unsafe)}<span class="api-keyword">${keyword}</span>${link(a, text)}</span>`;
   const row = (a: CatalogAPI, text: string, keyword = "fn ") =>
-    `<div class="catalog-row" data-api-path="${esc(a.display_path)}" data-claims="${a.claim_count}"${a.finding_count === undefined ? "" : ` data-findings="${a.finding_count}"`}><span>${(keyword && declared(a, text)) || label(a, text, keyword)}</span>${options.details ? options.details(a) : claimCounts(a)}</div>`;
+    `<div class="catalog-row" data-api-path="${esc(a.display_path)}" data-claims="${a.claim_count}"${a.finding_count === undefined ? "" : ` data-findings="${a.finding_count}"`}><span>${a.origin === "recorded" ? `${link(a, local(a.display_path))} <span class="meta">recorded callable · signature and safety not recorded</span>` : (keyword && declared(a, text)) || label(a, text, keyword)}</span>${options.details ? options.details(a) : claimCounts(a)}</div>`;
   const data = apis
     .map(describe)
     .sort(
@@ -222,6 +226,16 @@ export function renderAPICatalog(
       traits(false),
       "No trait implementations.",
     ) +
-    (blanket ? section("Blanket implementations", blanket, "") : "")
+    (blanket ? section("Blanket implementations", blanket, "") : "") +
+    (data.some((a) => a.category === "recorded")
+      ? section(
+          "Recorded callables",
+          data
+            .filter((a) => a.category === "recorded")
+            .map((a) => row(a.api, local(a.api.display_path), ""))
+            .join(""),
+          "",
+        )
+      : "")
   );
 }

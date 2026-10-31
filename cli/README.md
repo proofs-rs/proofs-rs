@@ -150,9 +150,11 @@ editing, publishing, comments, and stars are not available in the preview.
 
 `preview` opens the reader-facing UI and uses GET requests only. It does not run
 the verifier or require Node.js for any other CLI command. `publish --dry-run`
-prints prospective publication data, requires login, and may create an API
-catalogue import on the service. Neither publishes a report; only `publish`
-performs the final server-side validation and publication.
+prints prospective publication data and requires login. It sends the selected
+SARIF to `/api/v1/runs/prepare` for transient validation and exact API bindings;
+it does not store SARIF, create catalogue entries or import jobs, or publish a
+report. Only `publish` stores evidence and performs final report validation and
+publication. This protocol requires the updated CLI and service together.
 
 ### Troubleshooting
 
@@ -194,7 +196,7 @@ Omitting `[dependencies]` preserves the existing report's reviews when revising.
 - Multiple contract harnesses for one API, ambiguous targets/reexports, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - For standard `Default`, `Clone`, `Hasher`, `Display`, and `FromStr` implementations, discovery also records the short trait spelling used by rustdoc catalogues. Arbitrary external trait basenames are not guessed.
-- The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
+- Every callable in a valid recorded run receives an exact API binding from the service. Existing exact rustdoc IDs are retained, including supported trait aliases. Otherwise its precise spelling is stored as an author-attributed recorded callable, without inventing a Rust signature, safety status or docs.rs entry. Concrete type arguments and inherited default methods are not erased. The immutable run and selected theorem remain authoritative for claim scope; recorded callables are not independent compiler-replay attestations.
 - The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
 
 ## Creusot
@@ -331,7 +333,7 @@ Publication state is stored in the OS local data directory under `cargo-proofs/`
 - Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass recorded-run checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
 - Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original recorded evidence. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, reads the selected SARIF, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 200 claims (Kani discovery supports up to 100 APIs) and 128 KiB; each Aeneas theorem counts as one claim. Automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline. It authenticates and sends the selected SARIF to the service for the same structural, source, tool, successful-result and formal-evidence checks used by upload, then previews exact API bindings without storing the artifact. It does not perform final report creation/revision validation. Publication no longer requires a docs.rs catalogue import. The report limit is 200 claims (Kani discovery supports up to 100 APIs) and 128 KiB; each Aeneas theorem counts as one claim. Automatic splitting is deliberately unsupported.
 
 ## Development
 

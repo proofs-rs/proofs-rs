@@ -138,7 +138,8 @@ with tempfile.TemporaryDirectory() as temp:
         assert 'API mapping and signature unverified' in fetch(url)[1]
         assert 'API unverified' in fetch(base+'/claim/preview-claim-0')[1]
         missing=False; ambiguous=True
-        assert 'API mapping and signature unverified' in fetch(url)[1]
+        # Exact catalogue aliases resolve deterministically without generic erasure.
+        assert 'API mapping and signature unverified' not in fetch(url)[1]
         ambiguous=False
         # A competing server cannot silently choose a new port.
         assert 'EADDRINUSE' in failure('--port',url.split(':')[2].split('/')[0])

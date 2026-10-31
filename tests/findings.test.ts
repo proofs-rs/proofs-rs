@@ -1143,6 +1143,14 @@ test("Markdown body is the only required prose, supports observations, and has b
 test("body migration preserves origin, links, APIs and immutable history without truncation", async () => {
   const { readFileSync } = await import("node:fs");
   const { request, db, env } = await fixture(true, "0011_findings.sql");
+  // The running server requires the current observation-provenance tables;
+  // leave the finding-body migration unapplied for this historical fixture.
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0016_recorded_apis.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   const report = (await request("/reports", "POST", reportInput)).body.id;
   const expected = "x".repeat(10000),
     actual = "y".repeat(10000),

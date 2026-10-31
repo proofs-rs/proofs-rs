@@ -254,23 +254,46 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         "Too many claims"
     );
     let tool = api.tool_version(&config.tool.name, &config.tool.version)?;
-    if options.dry_run {
+    let bytes = fs::read(run_dir.join("run.sarif.json"))?;
+    let prepared = if options.dry_run {
         println!(
-            "Recorded SARIF (will upload on publish): {}",
+            "Recorded SARIF (validated without storage): {}",
             run_dir.join("run.sarif.json").display()
         );
+        api.upload("/api/v1/runs/prepare", &bytes)?
     } else {
-        api.upload(
-            &format!("/api/v1/runs/{run_id}/sarif"),
-            &fs::read(run_dir.join("run.sarif.json"))?,
-        )?;
-    }
-    api.prepare(&project.name, &project.version)?;
+        api.upload(&format!("/api/v1/runs/{run_id}/sarif"), &bytes)?
+    };
+    ensure!(
+        prepared["id"] == run_id,
+        "Server returned a different run ID"
+    );
+    let bindings = prepared["apis"]
+        .as_array()
+        .context("Server must support recorded API bindings; upgrade proofs.rs")?;
+    ensure!(
+        bindings.len() == contracts.len(),
+        "Server returned incomplete API bindings"
+    );
     let mut claims = vec![];
     let mut seen = BTreeSet::new();
-    for contract in contracts {
-        let (api_id, api_path) =
-            api.resolve(&project.name, &project.version, &contract.api_paths)?;
+    for (index, contract) in contracts.iter().enumerate() {
+        let binding = &bindings[index];
+        ensure!(
+            binding["contract_index"].as_u64() == Some(index as u64),
+            "Server returned reordered API bindings"
+        );
+        let api_id = binding["api_item_id"]
+            .as_str()
+            .context("Missing bound API ID")?
+            .to_owned();
+        let api_path = binding["display_path"]
+            .as_str()
+            .context("Missing bound API path")?;
+        ensure!(
+            contract.api_paths.iter().any(|p| p == api_path),
+            "Server API binding is not in recorded contract"
+        );
         let evidence = format!(
             "{}/blob/{}/{}#L{}-L{}",
             source["repositoryUri"]
@@ -336,6 +359,15 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
     // Unspecified editorial fields are preserved. Force changes only fields owned by this CLI/config.
     let mut body = crate::draft::compose(&config, generated, &remote, &saved, selected)?;
     crate::draft::resolve_finding_apis(&config, &mut body, |path| {
+        if let Some(binding) = bindings.iter().find(|b| {
+            b["display_path"].as_str() == Some(path)
+                || b["display_path"].as_str() == Some(&format!("{}::{path}", project.lib_name))
+        }) {
+            return binding["api_item_id"]
+                .as_str()
+                .map(str::to_owned)
+                .context("Missing finding API binding");
+        }
         api.resolve(&project.name, &project.version, &[path.to_owned()])
             .map(|(id, _)| id)
     })?;

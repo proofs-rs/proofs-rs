@@ -136,7 +136,8 @@ links, independent stars, revision navigation and discussion. Claim pages show
 shared and individual evidence/assumptions and a prominent originating-report
 panel with author karma, report stars and comment count; they have no comment
 form. Publish/revise edits shared details and repeated claim sections, selects
-APIs from the imported catalogue and previews the whole report before publishing.
+APIs from the imported catalogue or exact author-attributed verification records,
+and previews the whole report before publishing.
 My activity includes authored reports and visible comments. Deleted or hidden
 comments are excluded from activity, including the current user's own activity.
 Replies to replies indent again, with no depth cap. Token settings remain a simple
@@ -336,3 +337,35 @@ report's author, not separate reviews conducted by the service.
 Existing runs are converted once to schema v2 with empty snapshots; existing
 report revisions have no reviews. There is no permanent legacy/unrecorded
 validation path. See [the migration procedure](dependency-migration.md).
+
+## Recorded callable ingestion
+
+Every callable accepted from a valid cargo-proofs SARIF can be published without
+requiring docs.rs to describe that instance. `POST /api/v1/runs/prepare` accepts
+the same raw SARIF and 8 MiB bound as upload, performs the same source, registered
+tool, successful result, theorem, manifest and allowed-axiom checks, and returns
+one exact API binding per contract. Preparation stores no evidence, catalogue
+items or import jobs. Authentication bookkeeping is unchanged.
+
+An existing exact rustdoc alias keeps its API ID. Otherwise an observation gets
+a deterministic ID from crate, version and its exact recorded spelling; type
+arguments are retained. Persisted bindings take precedence on retries. Upload
+atomically registers the immutable run, API projection and per-contract
+`run_api_observations`. Reports must select an owned run and match its precise
+API path, contract index and formal harness. Arbitrary report fields cannot
+create API entries. IDs survive later runs and rustdoc enrichment.
+
+`api_item_provenance` marks recorded observations. These are author-attributed
+observations, not server compiler/Lean replay, independent rustdoc verification
+or crates.io release-existence attestations. Cargo names and exact SemVer are
+validated; source checkout provenance is retained. Signature and safety remain
+unknown (`is_unsafe: null` in public responses), with no fabricated docs.rs link.
+Unpublished observations are excluded from public API lists, resolution and
+counts until a public claim uses them. Later trusted import upgrades only
+observed placeholders without changing IDs; uploads cannot downgrade them.
+
+The CLI uses preparation bindings for dry-run and upload bindings for publish,
+so external reexports, macro-generated APIs, concrete instances and inherited
+default methods are not rejected merely because rustdoc cannot enumerate them.
+Existing rustdoc imports and APIs remain available independently. Old publishers
+that still require `/publish/prepare` must update to use the new record path.
