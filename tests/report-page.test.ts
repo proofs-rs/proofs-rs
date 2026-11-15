@@ -142,10 +142,7 @@ test("report body removes redundant labels and groups claims by API with revisio
   );
   const d: any = dom.window.document;
   assert.equal(d.querySelector('a[href^="/crate/"]'), null);
-  assert.equal(
-    d.querySelector(".report-explanation .markdown-body").textContent,
-    "Body <script>unsafe</script>",
-  );
+  assert.equal(d.querySelector(".report-explanation"), null);
   assert.equal(d.querySelector("script"), null);
   assert.equal(d.querySelector("dt"), null);
   assert.equal(d.querySelector(".report-environment").tagName, "DETAILS");
@@ -158,12 +155,6 @@ test("report body removes redundant labels and groups claims by API with revisio
     d.querySelector("#reproduce").parentElement.className,
     "report-section report-evidence",
   );
-  assert.equal(
-    d
-      .querySelector(".report-explanation")
-      .nextElementSibling.querySelector("h2").textContent,
-    "Evidence",
-  );
   assert.equal(d.querySelector(".api-claim-count"), null);
   assert.equal(d.querySelector(".catalog-columns"), null);
   assert(!d.body.textContent.includes("Preconditions"));
@@ -173,20 +164,18 @@ test("report body removes redundant labels and groups claims by API with revisio
   );
   assert.equal(d.querySelector(".report-apis h2").textContent, "APIs (1)");
   assert.equal(d.querySelectorAll('a[href="/api/api-1"]').length, 1);
-  assert.equal(d.querySelectorAll(".report-api-claims a").length, 3);
+  assert.equal(d.querySelectorAll(".inline-spec").length, 3);
   assert.equal(
-    d.querySelectorAll(".catalog-row > .report-api-claims").length,
-    1,
+    d.querySelectorAll('.report-api-claims a[href^="/claim/"]').length,
+    0,
   );
-  assert.equal(d.querySelector(".report-api-claims a").textContent, "Claim #1");
-  assert(!d.querySelector(".report-api-claims").textContent.includes("stars"));
-  assert(
-    !d.querySelector(".report-api-claims").textContent.includes("Claim 1"),
-  );
-  assert.equal(d.querySelectorAll('a[href$="?report_revision=3"]').length, 3);
-  assert.equal(
+  assert.match(
     d.querySelector(".report-api-claims").textContent,
-    "Claim #1, Claim #2, Claim #3",
+    /Formal specification unavailable/,
+  );
+  assert.match(
+    d.querySelector(".report-api-claims").textContent,
+    /input is valid/,
   );
   assert(
     ![...d.querySelectorAll("h2")].some((n: any) =>
@@ -430,7 +419,10 @@ test("report APIs include finding-only APIs and combine associations without dup
   const shared = d
     .querySelector('a[href="/api/shared"]')!
     .closest(".catalog-row")!;
-  assert.match(shared.textContent!, /Claim #1.*Finding: Signed <read>/);
+  assert.match(
+    shared.textContent!,
+    /Formal specification unavailable.*Finding: Signed <read>/,
+  );
   assert.equal(shared.querySelector("read"), null);
   dom.window.close();
 });

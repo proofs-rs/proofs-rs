@@ -25,6 +25,15 @@
       }
     });
   }
+  for (const form of document.querySelectorAll("form[data-predicate-demo]")) {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const first = Number(form.elements.first.value);
+      const second = Number(form.elements.second.value);
+      form.querySelector("output").textContent = String(first < second);
+    });
+  }
   for (const form of document.querySelectorAll("form[data-version-selector]")) {
     form
       .querySelector('select[name="version"]')

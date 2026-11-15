@@ -86,13 +86,10 @@ test("report and claim prose use contextual headings while code stays literal", 
   const report = new JSDOM(views.reportContent(c) + views.reportBody(c)).window
     .document;
   assert.equal(report.querySelector("h1")?.textContent, "# Literal");
-  assert.equal(
-    report.querySelector(".report-explanation h3")?.textContent,
-    "Intro",
-  );
+  assert.equal(report.querySelector(".report-explanation"), null);
   assert.deepEqual(
     [...report.querySelectorAll(".markdown-body h3")].map((x) => x.textContent),
-    ["Intro", "Environment", "Trust", "Limits"],
+    ["Environment", "Trust", "Limits"],
   );
   const claim = new JSDOM(views.claimContent(c)).window.document;
   assert.equal(
@@ -121,7 +118,7 @@ test("report and claim prose use contextual headings while code stays literal", 
 
 test("Overview separates author headings from preset sections and is omitted when empty", () => {
   const views = createViews({ user: null }, {}, () => "");
-  for (const render of [views.reportBody, views.claimContent]) {
+  for (const render of [views.claimContent]) {
     const d = new JSDOM(
       render({
         explanation: "# Parsing\n\n## Details\n\n# Evidence\n\nAuthor evidence",

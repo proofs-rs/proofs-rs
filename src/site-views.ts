@@ -283,7 +283,6 @@ export function createViews(
   // In-page links to the sections reportBody and the page actually render.
   function reportOutline(c: any, apis = false, comments?: number) {
     const links: [string, string][] = [
-      ...(c.explanation ? [["overview", "Overview"] as [string, string]] : []),
       ...(c.findings ? [["findings", "Findings"] as [string, string]] : []),
       ...(apis ? [["apis", "APIs"] as [string, string]] : []),
       ...(c.evidence_url || c.run_ids?.length || c.environment
@@ -317,8 +316,7 @@ export function createViews(
       : "";
   }
   function reportBody(c: any, recorded = "", findingsHTML = "", apisHTML = "") {
-    return `${c.explanation ? `<section class="report-section report-explanation" id="overview"><h2>Overview</h2><div class="markdown-body">${renderMarkdown(c.explanation, 2)}</div></section>` : ""}
-    ${findingsHTML}
+    return `${findingsHTML}
     ${apisHTML}
     ${c.evidence_url || c.run_ids?.length || c.environment ? `<section class="report-section report-evidence" id="evidence"><h2>Evidence</h2>${c.evidence_url ? `<p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p>` : ""}${reproduceSection(c.run_ids, c.environment, recorded)}</section>` : ""}
     ${c.trusted_assumptions ? `<section class="report-section" id="trusted"><h2>What is trusted</h2><div class="markdown-body">${renderMarkdown(c.trusted_assumptions, 2)}</div></section>` : ""}
@@ -389,6 +387,7 @@ export function createViews(
         hideCounts: true,
         expandFamilies: true,
         apiHref: (id) => {
+          if (c.synthetic) return "#apis";
           if (apiMap.get(id).unverified) return null;
           if (!options.preview || id.startsWith("preview-api-"))
             return apiHref(id);
@@ -400,13 +399,13 @@ export function createViews(
         details: (api) => {
           const claims = (groups.get(api.id) ?? []).map(
             (claim) =>
-              `<a href="${esc(claimHref(claim.id, claim.report_revision))}">Claim #${esc(claim.claim_number)}</a>`,
+              `<div class="inline-spec"><p class="meta">Report revision ${esc(claim.report_revision)} · ${esc(c.tool || "")}</p>${claim.formal_evidence ? formalStatement(claim.formal_evidence, true) : `<p class="meta">Formal specification unavailable.</p>${claim.precondition ? `<p>Precondition: <code>${esc(claim.precondition)}</code></p>` : ""}`}</div>`,
           );
           const findings = (findingGroups.get(api.id) ?? []).map(
             (f) =>
               `<a href="/finding/${enc(f.id)}">Finding: ${esc(f.title)}</a>${f.validity !== "reported" ? ` ${statusBadge(f.validity)}` : ""}`,
           );
-          return `<div class="report-api-claims"><span class="claim-links">${claims.join(", ")}</span>${findings.length ? `<span class="finding-links">${claims.length ? " · " : ""}${findings.join(", ")}</span>` : ""}</div>`;
+          return `<div class="report-api-claims"><div class="claim-links">${claims.join("")}</div>${findings.length ? `<span class="finding-links">${claims.length ? " · " : ""}${findings.join(", ")}</span>` : ""}</div>`;
         },
       },
     )}</section>`;
@@ -418,7 +417,7 @@ export function createViews(
         : `<div class="markdown-body">${renderMarkdown(value, 2)}</div>`;
     return `${individual ? content(individual) : ""}${shared ? `<details class="claim-report-context"><summary>From the report</summary>${content(shared)}</details>` : ""}`;
   }
-  function formalStatement(f: any) {
+  function formalStatement(f: any, inline = false) {
     if (f.kind === "creusot")
       return `<section class="report-section creusot-spec"><h2>Creusot specification</h2><pre tabindex="0"><code>${esc(
         [
@@ -446,17 +445,21 @@ export function createViews(
       hypothesis: "assume",
       instance: "instance",
     };
-    return `<section class="report-section formal-statement"><h2>Formal statement</h2><p><code>${esc(f.theorem)}</code></p>
+    return `<section class="report-section formal-statement"><h2>${inline ? "Spec" : "Formal statement"}</h2>${inline ? "" : `<p><code>${esc(f.theorem)}</code></p>`}
       <div class="lean-readable">
         ${f.binders.map((b: any) => `<div class="lean-row"><span class="lean-role">${roles[b.kind]}</span><span class="lean-expression"><span class="lean-binding">${esc(b.name)} :</span> ${expression(b.type, b.type_segments)}</span></div>`).join("")}
         <div class="lean-row lean-conclusion"><span class="lean-role">then</span><span class="lean-expression">${expression(f.conclusion, f.conclusion_segments)}</span></div>
       </div>
       ${[f.conclusion, ...f.binders.map((b: any) => b.type)].some((s: string) => s.includes("↑")) ? '<p class="meta">In Lean notation, ↑ denotes an implicit type conversion (coercion).</p>' : ""}
-      ${f.program ? `<h3>Target program</h3><pre><code>${esc(f.program)}</code></pre>` : ""}
-      <details><summary>Complete Lean proposition</summary><button type="button" data-copy-formal>Copy proposition</button><span role="status" data-copy-status></span><pre tabindex="0"><code>${esc(f.statement)}</code></pre></details>
+      ${!inline && f.program ? `<h3>Target program</h3><pre><code>${esc(f.program)}</code></pre>` : ""}
+      ${
+        inline
+          ? ""
+          : `<details><summary>Complete Lean proposition</summary><button type="button" data-copy-formal>Copy proposition</button><span role="status" data-copy-status></span><pre tabindex="0"><code>${esc(f.statement)}</code></pre></details>
       <p>${f.source_url ? `<a href="${esc(f.source_url)}">Theorem source at recorded commit</a>` : "Theorem source is in the local snapshot"} · <a href="${esc(f.check_url)}">Recorded check</a></p>
       <details><summary>Referenced definitions (up to 100 direct references)</summary><ul>${f.definitions.map((d: any) => `<li>${d.source_url ? `<a href="${esc(d.source_url)}"><code>${esc(d.name)}</code></a>` : `<code>${esc(d.name)}</code> · ${esc(d.module)}`}</li>`).join("")}</ul>${f.definitions_truncated ? "<p>Reference limit reached; consult the full theorem source.</p>" : ""}</details>
-      <p class="meta">Mapping: ${esc(f.mapping)}. Translation was not rerun by this recording.</p></section>`;
+      <p class="meta">Mapping: ${esc(f.mapping)}. Translation was not rerun by this recording.</p>`
+      }</section>`;
   }
   function claimContent(c: any, stars = false) {
     return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}

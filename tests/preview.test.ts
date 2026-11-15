@@ -108,11 +108,7 @@ test("preview uses production report, claim, Markdown and recorded-run rendering
   );
   const preview = new JSDOM(renderPreview(data, "/report").html);
   const production = new JSDOM(views.reportBody(data.report));
-  for (const selector of [
-    ".report-explanation",
-    ".report-limitations",
-    ".report-environment",
-  ]) {
+  for (const selector of [".report-limitations", ".report-environment"]) {
     assert.equal(
       preview.window.document.querySelector(selector)!.textContent,
       production.window.document.querySelector(selector)!.textContent,
@@ -292,10 +288,7 @@ test("Finding drafts appear after Overview, remain separate from successful chec
   const result = renderPreview(snapshot, "/report");
   const dom = new JSDOM(result.html),
     d = dom.window.document;
-  assert.equal(
-    d.querySelector(".report-explanation")!.nextElementSibling!.id,
-    "findings",
-  );
+  assert.equal(d.querySelector(".report-explanation"), null);
   assert.match(
     d.querySelector(".report-outcome")!.textContent!,
     /1 verified claim · 1 finding\b/,

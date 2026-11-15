@@ -1,3 +1,5 @@
+import { claimFormalEvidence } from "./runs";
+import { uiDemo } from "./ui-demo";
 import { reportShare } from "../web/report-share";
 import { resolveSocialCard, cardMetadata } from "./social-card";
 import { reportFindings } from "./findings";
@@ -94,6 +96,7 @@ const pageNames = new Set([
   "about",
   "publish",
   "runs",
+  "spec-demo",
 ]);
 export function isSitePage(path: string) {
   const parts = path.split("/").filter(Boolean);
@@ -285,6 +288,11 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       reportOutline,
       claimContent,
     } = v;
+    if (p === "spec-demo") {
+      if (c.env.ENVIRONMENT !== "staging" && c.env.ENVIRONMENT !== "local-demo")
+        throw new Fault(404, "page_not_found");
+      return result("Specification UI demo", uiDemo(reportAPIs));
+    }
     const search = (q = "") =>
       `<form action="/crates" method="get" class="searchbar"><input name="q" value="${esc(q)}" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form>`;
     const login = () =>
@@ -662,6 +670,11 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         ? await get(`/crates/${enc(item.crate)}/${enc(item.version)}/apis`)
         : null;
       const findingSection = `<section id="findings" class="report-section"><h2>Findings (${item.finding_count})</h2>${item.revision_no !== item.latest_revision_no ? "<p>Findings show current information, including later additions. Each entry identifies its origin revision and latest update; it is separate from this revision’s proof content.</p>" : ""}${item.findings.map((f: any) => findingItem(f, false, [], true, editableFindings)).join("") || "<p>No findings reported.</p>"}${editableFindings ? `<details><summary>Add finding</summary>${findingForm(item.id, undefined, findingAPIs.items)}</details>` : ""}</section>`;
+      // Formal evidence belongs to this exact report revision.
+      for (const claim of item.claims) {
+        if (claim.evidence_ref)
+          claim.formal_evidence = await claimFormalEvidence(c, claim);
+      }
       const content = reportBody(
         item,
         recorded.join(""),

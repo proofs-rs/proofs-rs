@@ -716,7 +716,15 @@ textarea {
   margin-bottom: 4px;
 }
 .report-apis .catalog-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.inline-spec {
+  min-width: 0;
+}
+.inline-spec pre,
+.inline-spec .lean-expression {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .report-apis .api-family > summary {
   grid-template-columns: minmax(0, 1fr);
