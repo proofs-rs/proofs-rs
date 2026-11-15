@@ -220,7 +220,22 @@ export function readRecord(sarif: any) {
       throw new Fault(400, "invalid_run_contract");
   }
   for (const contract of b.contracts) {
-    if (contract.formal !== undefined) {
+    if (contract.formal?.kind === "creusot") {
+      const spec: S.z.infer<typeof S.creusotEvidence> = contract.formal;
+      const precondition = spec.requires.length
+        ? spec.requires.map((r: string) => `(${r})`).join(" && ")
+        : "true";
+      if (
+        s.tool.driver.name.toLowerCase() !== "creusot" ||
+        spec.source.file !== contract.file ||
+        spec.source.first_line !== contract.first_line ||
+        spec.source.last_line !== contract.last_line ||
+        contract.precondition !== precondition ||
+        !spec.signature.trim() ||
+        [...spec.requires, ...spec.ensures].some((text: string) => !text.trim())
+      )
+        throw new Fault(400, "invalid_creusot_spec");
+    } else if (contract.formal !== undefined) {
       const f = contract.formal;
       if (
         s.tool.driver.name.toLowerCase() !== "aeneas" ||
@@ -600,10 +615,10 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
   for (const claim of v.claims) {
     if (claim.evidence_ref != null) {
       const sarif = records.get(claim.evidence_ref.run_id);
-      if (
-        !sarif ||
-        !resolveContract(sarif, claim.evidence_ref.run_id, claim)?.formal
-      )
+      const contract = sarif
+        ? resolveContract(sarif, claim.evidence_ref.run_id, claim)
+        : null;
+      if (!contract || !contract.formal)
         throw new Fault(400, "invalid_evidence_ref");
     } else if (
       !claim.precondition.trim() ||
@@ -670,13 +685,15 @@ export async function claimFormalEvidence(c: Ctx, claim: any) {
   const sarif = await (await readStored(c, run)).json();
   const record = readRecord(sarif);
   const contract = resolveContract(sarif, ref.run_id, claim);
-  if (!contract?.formal) throw new Fault(400, "invalid_evidence_ref");
+  if (!contract || !contract.formal)
+    throw new Fault(400, "invalid_evidence_ref");
+  const check_url = `/runs/${ref.run_id}?report=${claim.report_id}&v=${claim.report_revision}#${checkAnchor(ref.harness)}`;
   return {
     ...formalSourceLinks(
       contract.formal,
       record.source.repository,
       record.source.commit,
     ),
-    check_url: `/runs/${ref.run_id}?report=${claim.report_id}&v=${claim.report_revision}#${checkAnchor(ref.harness)}`,
+    check_url,
   };
 }

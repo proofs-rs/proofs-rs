@@ -8,7 +8,10 @@ export function resolveContract(sarif: any, runId: string, claim: any) {
     if (
       matches.length !== 1 ||
       !matches[0].api_paths.includes(claim.display_path) ||
-      matches[0].formal?.theorem !== ref.harness
+      !(
+        matches[0].formal?.theorem === ref.harness ||
+        matches[0].formal?.kind === "creusot"
+      )
     )
       return null;
     return matches[0];
@@ -28,17 +31,22 @@ export const checkAnchor = (harness: string) =>
   ).join("");
 
 /** Resolve only source locations recorded for this exact revision. */
-export function formalSourceLinks(
-  formal: any,
-  repository: string,
-  commit: string,
-) {
-  const sourceURL = (source: any) =>
+type RecordedSource = { file: string; first_line: number; last_line: number };
+export function formalSourceLinks<
+  T extends {
+    source: RecordedSource;
+    kind?: string;
+    definitions?: { source?: RecordedSource | null }[];
+  },
+>(formal: T, repository: string, commit: string) {
+  const sourceURL = (source: RecordedSource) =>
     `${repository}/blob/${commit}/${source.file.split("/").map(encodeURIComponent).join("/")}#L${source.first_line}-L${source.last_line}`;
+  if (formal.kind === "creusot")
+    return { ...formal, source_url: sourceURL(formal.source) };
   return {
     ...formal,
     source_url: sourceURL(formal.source),
-    definitions: formal.definitions.map((d: any) => ({
+    definitions: formal.definitions!.map((d) => ({
       ...d,
       source_url: d.source ? sourceURL(d.source) : null,
     })),

@@ -261,9 +261,14 @@ for (const c of manifest.cases)
       if (claim.evidence_ref) {
         const detail = await request(`/claims/${claim.id}`);
         assert.equal(detail.status, 200);
-        const formal = p.contracts.find(
+        const contract = p.contracts.find(
           (x: any) => x.harness === claim.evidence_ref.harness,
-        ).formal;
+        );
+        if (contract.formal.kind === "creusot") {
+          retained(detail.body.formal_evidence, contract.formal);
+          continue;
+        }
+        const formal = contract.formal;
         assert.equal(detail.body.formal_evidence.theorem, formal.theorem);
         assert.equal(detail.body.formal_evidence.statement, formal.statement);
         assert.equal(detail.body.formal_evidence.mapping, formal.mapping);

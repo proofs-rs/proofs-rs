@@ -190,7 +190,7 @@ export function renderPreview(
           };
           if (localOnly) {
             claim.formal_evidence.source_url = null;
-            for (const d of claim.formal_evidence.definitions)
+            for (const d of claim.formal_evidence.definitions ?? [])
               d.source_url = null;
           }
         }

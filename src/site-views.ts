@@ -419,6 +419,14 @@ export function createViews(
     return `${individual ? content(individual) : ""}${shared ? `<details class="claim-report-context"><summary>From the report</summary>${content(shared)}</details>` : ""}`;
   }
   function formalStatement(f: any) {
+    if (f.kind === "creusot")
+      return `<section class="report-section creusot-spec"><h2>Creusot specification</h2><pre tabindex="0"><code>${esc(
+        [
+          ...f.requires.map((r: string) => `#[requires(${r})]`),
+          ...f.ensures.map((r: string) => `#[ensures(${r})]`),
+          f.signature,
+        ].join("\n"),
+      )}</code></pre><p>${f.source_url ? `<a href="${esc(f.source_url)}">Source at recorded commit</a>` : "Source is in the local snapshot"} · <a href="${esc(f.check_url)}">Recorded check</a></p></section>`;
     const definitions = new Map<string, any>(
       f.definitions.map((d: any) => [d.name, d]),
     );
