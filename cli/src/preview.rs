@@ -194,7 +194,7 @@ impl RecordedPreview {
             };
             metadata.insert(id.clone(), info);
             let mut claim = json!({"api_item_id":id,"precondition":contract.precondition,"evidence_url":format!("{repository}/blob/{commit}/{}#L{}-L{}",contract.file,contract.first_line,contract.last_line)});
-            if contract.formal.is_some() || contract.spec.is_some() {
+            if contract.formal.is_some() {
                 claim["evidence_ref"] = json!({"run_id":self.run_id,"harness":contract.harness});
             }
             ensure!(

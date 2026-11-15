@@ -245,7 +245,7 @@ for (const c of manifest.cases)
         return {
           api_item_id: a.api_item_id,
           precondition: p.contracts[i].precondition,
-          ...(p.contracts[i].formal || p.contracts[i].spec
+          ...(p.contracts[i].formal
             ? { evidence_ref: { run_id: rid, harness: p.contracts[i].harness } }
             : {}),
         };
@@ -264,9 +264,8 @@ for (const c of manifest.cases)
         const contract = p.contracts.find(
           (x: any) => x.harness === claim.evidence_ref.harness,
         );
-        if (contract.spec) {
-          retained(detail.body.spec, contract.spec);
-          assert.equal(detail.body.formal_evidence, null);
+        if (contract.formal.kind === "creusot") {
+          retained(detail.body.formal_evidence, contract.formal);
           continue;
         }
         const formal = contract.formal;

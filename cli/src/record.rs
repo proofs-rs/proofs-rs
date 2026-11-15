@@ -12,8 +12,6 @@ use std::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contract {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub spec: Option<scan::CreusotSpec>,
     pub api_paths: Vec<String>,
     pub precondition: String,
     pub file: String,
@@ -377,33 +375,39 @@ pub fn run(args: &ProjectArgs, mut command: Vec<String>) -> Result<()> {
         config.tool.is_aeneas() || !discovered.is_empty(),
         "No publishable contracts found"
     );
-    let contracts: Vec<Contract> = discovered
-        .iter()
-        .map(|c| {
-            Ok(Contract {
-                spec: c.spec.clone(),
-                formal: None,
-                api_paths: c
-                    .api_paths
-                    .iter()
-                    .map(|p| qualify_api_path(&captured.lib_name, p))
-                    .collect(),
-                precondition: c.precondition.clone(),
-                file: c
+    let contracts: Vec<Contract> =
+        discovered
+            .iter()
+            .map(|c| {
+                let file = c
                     .file
                     .strip_prefix(&source)?
                     .to_string_lossy()
-                    .replace('\\', "/"),
-                first_line: c.first_line,
-                last_line: c.last_line,
-                harness: if config.tool.is_aeneas() {
-                    c.harness.clone()
-                } else {
-                    format!("{}::{}", captured.lib_name, c.harness)
-                },
+                    .replace('\\', "/");
+                let formal = c.spec.as_ref().map(|spec| json!({
+                "kind": "creusot", "version": spec.version,
+                "signature": spec.signature, "requires": spec.requires, "ensures": spec.ensures,
+                "source": {"file": file, "first_line": c.first_line, "last_line": c.last_line}
+            }));
+                Ok(Contract {
+                    formal,
+                    api_paths: c
+                        .api_paths
+                        .iter()
+                        .map(|p| qualify_api_path(&captured.lib_name, p))
+                        .collect(),
+                    precondition: c.precondition.clone(),
+                    file,
+                    first_line: c.first_line,
+                    last_line: c.last_line,
+                    harness: if config.tool.is_aeneas() {
+                        c.harness.clone()
+                    } else {
+                        format!("{}::{}", captured.lib_name, c.harness)
+                    },
+                })
             })
-        })
-        .collect::<Result<_>>()?;
+            .collect::<Result<_>>()?;
     // Existing proof sessions may be useful inputs; only newly written proof files count as results.
     let before = proof_files(&source)?;
     let started = chrono::Utc::now();
@@ -1072,7 +1076,6 @@ mod tests {
     use super::*;
     fn contract() -> Contract {
         Contract {
-            spec: None,
             formal: None,
             api_paths: vec!["demo::f".into()],
             precondition: "true".into(),

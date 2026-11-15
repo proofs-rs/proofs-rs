@@ -1037,7 +1037,6 @@ pub fn extract(
             .entry(found[0].api_paths[0].clone())
             .or_default()
             .push(crate::record::Contract {
-                spec: None,
                 api_paths: found[0]
                     .api_paths
                     .iter()

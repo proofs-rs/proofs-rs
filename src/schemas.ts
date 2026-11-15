@@ -197,17 +197,20 @@ const leanSegments = z
     }),
   )
   .max(10000);
-export const creusotSpec = z.strictObject({
+export const creusotEvidence = z.strictObject({
+  kind: z.literal("creusot"),
   version: z.literal(1),
   signature: string.min(1).max(1000000),
   requires: z.array(string.min(1).max(1000000)).max(1000),
   ensures: z.array(string.min(1).max(1000000)).max(1000),
+  source: z.strictObject({
+    file: string,
+    first_line: integer.positive(),
+    last_line: integer.positive(),
+  }),
 });
-export const creusotSpecDetail = creusotSpec.extend({
-  source_url: string,
-  check_url: string,
-});
-export const formalEvidence = z.strictObject({
+const aeneasEvidence = z.strictObject({
+  kind: z.literal("aeneas").optional(),
   version: z.literal(1),
   theorem: string.min(1).max(1000),
   module: string.min(1).max(1000),
@@ -273,17 +276,22 @@ export const formalEvidence = z.strictObject({
   definitions_truncated: z.boolean(),
   translation_rerun: z.literal(false),
 });
-export const formalDetail = formalEvidence.extend({
-  source_url: string,
-  check_url: string,
-  definitions: z
-    .array(
-      formalEvidence.shape.definitions.element.extend({
-        source_url: nullableString,
-      }),
-    )
-    .max(100),
-});
+export const formalEvidence = z.union([aeneasEvidence, creusotEvidence]);
+export const formalDetail = z.union([
+  aeneasEvidence.extend({
+    source_url: string,
+    check_url: string,
+    definitions: z
+      .array(
+        aeneasEvidence.shape.definitions.element.extend({
+          source_url: nullableString,
+        }),
+      )
+      .max(100),
+  }),
+  creusotEvidence.extend({ source_url: string, check_url: string }),
+]);
+
 export const claim = z
   .object({
     id: string,
@@ -789,7 +797,6 @@ export const sarif = z
                     api_paths: z.array(string).min(1),
                     precondition: string,
                     formal: formalEvidence.optional(),
-                    spec: creusotSpec.optional(),
                   }),
                 )
                 .min(1)

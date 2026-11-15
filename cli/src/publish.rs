@@ -311,7 +311,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             contract.harness, api_path, contract.precondition, evidence
         );
         let mut claim = json!({"api_item_id":api_id,"precondition":contract.precondition,"evidence_url":evidence});
-        if contract.formal.is_some() || contract.spec.is_some() {
+        if contract.formal.is_some() {
             claim["evidence_ref"] = json!({"run_id":run_id,"harness":contract.harness});
         }
         ensure!(

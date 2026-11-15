@@ -76,7 +76,8 @@ def main():
                      'requires': [], 'ensures': ['result == x']},
     }
     for contract in contracts:
-        assert contract['spec'] == expected_specs[contract['harness'].split('::')[-1]]
+        assert contract['formal'] == {**expected_specs[contract['harness'].split('::')[-1]],
+                                      'kind': 'creusot', 'source': {key: contract[key] for key in ['file', 'first_line', 'last_line']}}
     assert all(r['kind'] == 'pass' for r in sarif['results'])
     assert {r['properties']['harness'] for r in sarif['results']} == {c['harness'] for c in contracts}
     # All leaves must identify the actual configured prover, including split VCs.

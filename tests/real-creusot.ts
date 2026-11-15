@@ -116,17 +116,19 @@ test("real Creusot SARIF survives ingestion, Report creation and Claim rendering
     const contract = contracts.find(
       (c) => c.harness === claim.evidence_ref.harness,
     )!;
-    assert(contract.spec);
+    assert(contract.formal?.kind === "creusot");
     for (const field of [
       "version",
       "signature",
       "requires",
       "ensures",
     ] as const)
-      assert.deepEqual(detail.body.spec[field], contract.spec[field]);
-    assert.equal(detail.body.formal_evidence, null);
+      assert.deepEqual(
+        detail.body.formal_evidence[field],
+        contract.formal[field],
+      );
     assert(
-      detail.body.spec.source_url.includes(
+      detail.body.formal_evidence.source_url.includes(
         run.versionControlProvenance[0].revisionId,
       ),
     );
@@ -141,20 +143,31 @@ test("real Creusot SARIF survives ingestion, Report creation and Claim rendering
     assert(
       document
         .querySelector(".creusot-spec code")
-        ?.textContent?.includes(contract.spec.signature),
+        ?.textContent?.includes(contract.formal.signature),
     );
     for (const expression of [
-      ...contract.spec.requires,
-      ...contract.spec.ensures,
+      ...contract.formal.requires,
+      ...contract.formal.ensures,
     ])
       assert(
         document
           .querySelector(".creusot-spec code")
           ?.textContent?.includes(expression),
       );
-    assert(document.querySelector(`a[href="${detail.body.spec.source_url}"]`));
-    assert(document.querySelector(`a[href="${detail.body.spec.check_url}"]`));
-    const checkURL = new URL(detail.body.spec.check_url, env.APP_ORIGIN);
+    assert(
+      document.querySelector(
+        `a[href="${detail.body.formal_evidence.source_url}"]`,
+      ),
+    );
+    assert(
+      document.querySelector(
+        `a[href="${detail.body.formal_evidence.check_url}"]`,
+      ),
+    );
+    const checkURL = new URL(
+      detail.body.formal_evidence.check_url,
+      env.APP_ORIGIN,
+    );
     const checked = await app.request(checkURL.href, {}, env);
     assert.equal(checked.status, 200);
     assert(
@@ -213,15 +226,15 @@ test(
       assert.equal(response.status, 200);
       const document = new JSDOM(await response.text()).window.document;
       assert(document.body.textContent?.includes(contract.precondition));
-      assert(contract.spec);
+      assert(contract.formal?.kind === "creusot");
       assert(
         document
           .querySelector(".creusot-spec code")
-          ?.textContent?.includes(contract.spec.signature),
+          ?.textContent?.includes(contract.formal.signature),
       );
       for (const expression of [
-        ...contract.spec.requires,
-        ...contract.spec.ensures,
+        ...contract.formal.requires,
+        ...contract.formal.ensures,
       ])
         assert(
           document

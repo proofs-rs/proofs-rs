@@ -14,16 +14,35 @@ test("Creusot spec shape and cross-field validation preserve legacy recordings",
   recording.runs[0].tool.driver = { name: "creusot", version: "0.13.0" };
   const contract = recording.runs[0].properties.proofs.contracts[0];
   const spec = {
+    kind: "creusot",
     version: 1,
+    source: {
+      file: contract.file,
+      first_line: contract.first_line,
+      last_line: contract.last_line,
+    },
     signature: "pub fn safe()",
     requires: [] as string[],
     ensures: ["result == ()"],
   };
   const current = structuredClone(recording) as any;
-  current.runs[0].properties.proofs.contracts[0].spec = spec;
-  assert.deepEqual(readRecord(current).contracts[0].spec, spec);
-  assert.equal(readRecord(recording).contracts[0].spec, undefined);
+  current.runs[0].properties.proofs.contracts[0].formal = spec;
+  assert.deepEqual(readRecord(current).contracts[0].formal, spec);
+  assert.equal(readRecord(recording).contracts[0].formal, undefined);
   const invalid = [
+    {
+      mutate: (r: any) => {
+        r.runs[0].properties.proofs.contracts[0].formal.source.file =
+          "other.rs";
+      },
+      error: /invalid_creusot_spec/,
+    },
+    {
+      mutate: (r: any) => {
+        r.runs[0].properties.proofs.contracts[0].formal.source.first_line += 1;
+      },
+      error: /invalid_creusot_spec/,
+    },
     {
       mutate: (r: any) => {
         r.runs[0].tool.driver.name = "kani";
@@ -38,25 +57,25 @@ test("Creusot spec shape and cross-field validation preserve legacy recordings",
     },
     {
       mutate: (r: any) => {
-        r.runs[0].properties.proofs.contracts[0].spec.signature = " ";
+        r.runs[0].properties.proofs.contracts[0].formal.signature = " ";
       },
       error: /invalid_creusot_spec/,
     },
     {
       mutate: (r: any) => {
-        r.runs[0].properties.proofs.contracts[0].spec.ensures = [" "];
+        r.runs[0].properties.proofs.contracts[0].formal.ensures = [" "];
       },
       error: /invalid_creusot_spec/,
     },
     {
       mutate: (r: any) => {
-        r.runs[0].properties.proofs.contracts[0].spec.version = 2;
+        r.runs[0].properties.proofs.contracts[0].formal.version = 2;
       },
       error: /invalid_sarif/,
     },
     {
       mutate: (r: any) => {
-        r.runs[0].properties.proofs.contracts[0].spec.requires = "true";
+        r.runs[0].properties.proofs.contracts[0].formal.requires = "true";
       },
       error: /invalid_sarif/,
     },
@@ -88,7 +107,7 @@ test("Creusot spec shape and cross-field validation preserve legacy recordings",
     },
   };
   assert.equal(
-    resolveContract(current, claim.evidence_ref.run_id, claim).spec.signature,
+    resolveContract(current, claim.evidence_ref.run_id, claim).formal.signature,
     spec.signature,
   );
   assert.equal(resolveContract(current, "wrong-run", claim), null);
@@ -103,6 +122,7 @@ test("Creusot spec shape and cross-field validation preserve legacy recordings",
 
 test("Creusot specification HTML preserves expression text and escapes markup", () => {
   const spec = {
+    kind: "creusot",
     signature: "pub fn compare<T>(x: T) -> bool",
     requires: ['x@ < 10 && "<script>" == "<script>"'],
     ensures: ["(^x)@ == (*x)@ + 1"],
@@ -115,7 +135,12 @@ test("Creusot specification HTML preserves expression text and escapes markup", 
     () => "",
   );
   const document = new JSDOM(
-    claimContent({ id: "c", title: "Spec", precondition: "true", spec }),
+    claimContent({
+      id: "c",
+      title: "Spec",
+      precondition: "true",
+      formal_evidence: spec,
+    }),
   ).window.document;
   const text = document.querySelector(".creusot-spec code")!.textContent!;
   for (const expected of [spec.signature, ...spec.requires, ...spec.ensures])

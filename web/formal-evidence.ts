@@ -1,5 +1,3 @@
-import type { z, creusotSpec } from "../src/schemas";
-
 /** An explicit reference never falls back to prose matching. Shared by detail and Reproduce. */
 export function resolveContract(sarif: any, runId: string, claim: any) {
   const contracts = sarif.runs[0].properties.proofs.contracts;
@@ -10,7 +8,10 @@ export function resolveContract(sarif: any, runId: string, claim: any) {
     if (
       matches.length !== 1 ||
       !matches[0].api_paths.includes(claim.display_path) ||
-      !(matches[0].formal?.theorem === ref.harness || matches[0].spec)
+      !(
+        matches[0].formal?.theorem === ref.harness ||
+        matches[0].formal?.kind === "creusot"
+      )
     )
       return null;
     return matches[0];
@@ -29,35 +30,23 @@ export const checkAnchor = (harness: string) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
 
-/** Project a validated Creusot contract onto its immutable recorded source. */
-export function specSourceLinks(
-  contract: {
-    spec: z.infer<typeof creusotSpec>;
-    file: string;
-    first_line: number;
-    last_line: number;
-  },
-  repository: string,
-  commit: string,
-) {
-  return {
-    ...contract.spec,
-    source_url: `${repository}/blob/${commit}/${contract.file.split("/").map(encodeURIComponent).join("/")}#L${contract.first_line}-L${contract.last_line}`,
-  };
-}
-
 /** Resolve only source locations recorded for this exact revision. */
-export function formalSourceLinks(
-  formal: any,
-  repository: string,
-  commit: string,
-) {
-  const sourceURL = (source: any) =>
+type RecordedSource = { file: string; first_line: number; last_line: number };
+export function formalSourceLinks<
+  T extends {
+    source: RecordedSource;
+    kind?: string;
+    definitions?: { source?: RecordedSource | null }[];
+  },
+>(formal: T, repository: string, commit: string) {
+  const sourceURL = (source: RecordedSource) =>
     `${repository}/blob/${commit}/${source.file.split("/").map(encodeURIComponent).join("/")}#L${source.first_line}-L${source.last_line}`;
+  if (formal.kind === "creusot")
+    return { ...formal, source_url: sourceURL(formal.source) };
   return {
     ...formal,
     source_url: sourceURL(formal.source),
-    definitions: formal.definitions.map((d: any) => ({
+    definitions: formal.definitions!.map((d) => ({
       ...d,
       source_url: d.source ? sourceURL(d.source) : null,
     })),

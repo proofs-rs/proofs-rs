@@ -59,6 +59,13 @@ meaning of the specification and its limits in the Report and Claim explanations
 Older recordings remain readable; rerun verification to capture and display
 their specifications.
 
+Creusot uses the same recorded formal-evidence storage and Claim reference path
+as Aeneas. Its payload is identified by `kind: "creusot"`; it contains the Rust
+signature and predicates rather than a Lean proposition. Predicate definition
+bodies and per-predicate definition links are not captured by the current
+source extractor. The recorded-source link lets readers inspect that source;
+Aeneas retains its separate compiler-derived direct-definition links.
+
 ## What a run must show
 
 The prover run must create fresh `proof.json` sessions that map unambiguously to

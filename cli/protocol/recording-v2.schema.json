@@ -677,263 +677,299 @@
           "$ref": "#/$defs/__schema3"
         },
         "formal": {
-          "type": "object",
-          "properties": {
-            "version": {
-              "type": "number",
-              "const": 1
-            },
-            "theorem": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000,
-              "$ref": "#/$defs/__schema3"
-            },
-            "module": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000,
-              "$ref": "#/$defs/__schema3"
-            },
-            "statement": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000000,
-              "$ref": "#/$defs/__schema3"
-            },
-            "binders": {
-              "maxItems": 1000,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema23"
-              }
-            },
-            "conclusion": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000000,
-              "$ref": "#/$defs/__schema3"
-            },
-            "conclusion_segments": {
-              "$ref": "#/$defs/__schema24"
-            },
-            "program": {
-              "anyOf": [
-                {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "aeneas"
+                },
+                "version": {
+                  "type": "number",
+                  "const": 1
+                },
+                "theorem": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
                   "$ref": "#/$defs/__schema3"
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "program_head": {
-              "anyOf": [
-                {
+                "module": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
                   "$ref": "#/$defs/__schema3"
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "axioms": {
-              "maxItems": 100,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema3"
-              }
-            },
-            "mapping": {
-              "type": "string",
-              "enum": [
-                "manual",
-                "manifest"
-              ]
-            },
-            "manifest": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "path": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 1000,
+                "statement": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000000,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "binders": {
+                  "maxItems": 1000,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema23"
+                  }
+                },
+                "conclusion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000000,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "conclusion_segments": {
+                  "$ref": "#/$defs/__schema24"
+                },
+                "program": {
+                  "anyOf": [
+                    {
                       "$ref": "#/$defs/__schema3"
                     },
-                    "sha256": {
-                      "pattern": "^[a-f0-9]{64}$",
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "program_head": {
+                  "anyOf": [
+                    {
                       "$ref": "#/$defs/__schema3"
                     },
-                    "aeneas_version": {
-                      "$ref": "#/$defs/__schema3"
-                    },
-                    "charon_version": {
-                      "$ref": "#/$defs/__schema3"
-                    },
-                    "entry": {
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "axioms": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema3"
+                  }
+                },
+                "mapping": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "manifest"
+                  ]
+                },
+                "manifest": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "lean_name": {
+                        "path": {
+                          "type": "string",
                           "minLength": 1,
+                          "maxLength": 1000,
                           "$ref": "#/$defs/__schema3"
                         },
-                        "lean_file": {
-                          "minLength": 1,
+                        "sha256": {
+                          "pattern": "^[a-f0-9]{64}$",
                           "$ref": "#/$defs/__schema3"
                         },
-                        "rust_name": {
-                          "minLength": 1,
+                        "aeneas_version": {
                           "$ref": "#/$defs/__schema3"
                         },
-                        "def_id": {
-                          "minimum": 0,
-                          "$ref": "#/$defs/__schema9"
+                        "charon_version": {
+                          "$ref": "#/$defs/__schema3"
                         },
-                        "is_local": {
-                          "type": "boolean",
-                          "const": true
-                        },
-                        "source": {
+                        "entry": {
                           "type": "object",
                           "properties": {
-                            "file": {
+                            "lean_name": {
+                              "minLength": 1,
                               "$ref": "#/$defs/__schema3"
                             },
-                            "begin_line": {
-                              "exclusiveMinimum": 0,
+                            "lean_file": {
+                              "minLength": 1,
+                              "$ref": "#/$defs/__schema3"
+                            },
+                            "rust_name": {
+                              "minLength": 1,
+                              "$ref": "#/$defs/__schema3"
+                            },
+                            "def_id": {
+                              "minimum": 0,
                               "$ref": "#/$defs/__schema9"
                             },
-                            "end_line": {
-                              "exclusiveMinimum": 0,
-                              "$ref": "#/$defs/__schema9"
+                            "is_local": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "file": {
+                                  "$ref": "#/$defs/__schema3"
+                                },
+                                "begin_line": {
+                                  "exclusiveMinimum": 0,
+                                  "$ref": "#/$defs/__schema9"
+                                },
+                                "end_line": {
+                                  "exclusiveMinimum": 0,
+                                  "$ref": "#/$defs/__schema9"
+                                }
+                              },
+                              "required": [
+                                "file",
+                                "begin_line",
+                                "end_line"
+                              ],
+                              "additionalProperties": {}
                             }
                           },
                           "required": [
-                            "file",
-                            "begin_line",
-                            "end_line"
+                            "lean_name",
+                            "lean_file",
+                            "rust_name",
+                            "def_id",
+                            "is_local",
+                            "source"
                           ],
                           "additionalProperties": {}
                         }
                       },
                       "required": [
-                        "lean_name",
-                        "lean_file",
-                        "rust_name",
-                        "def_id",
-                        "is_local",
-                        "source"
+                        "path",
+                        "sha256",
+                        "aeneas_version",
+                        "charon_version",
+                        "entry"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "first_line": {
+                      "exclusiveMinimum": 0,
+                      "$ref": "#/$defs/__schema9"
+                    },
+                    "last_line": {
+                      "exclusiveMinimum": 0,
+                      "$ref": "#/$defs/__schema9"
                     }
                   },
                   "required": [
-                    "path",
-                    "sha256",
-                    "aeneas_version",
-                    "charon_version",
-                    "entry"
+                    "file",
+                    "first_line",
+                    "last_line"
                   ],
                   "additionalProperties": false
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "source": {
-              "type": "object",
-              "properties": {
-                "file": {
-                  "$ref": "#/$defs/__schema3"
+                "definitions": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema26"
+                  }
                 },
-                "first_line": {
-                  "exclusiveMinimum": 0,
-                  "$ref": "#/$defs/__schema9"
+                "definitions_truncated": {
+                  "type": "boolean"
                 },
-                "last_line": {
-                  "exclusiveMinimum": 0,
-                  "$ref": "#/$defs/__schema9"
+                "translation_rerun": {
+                  "type": "boolean",
+                  "const": false
                 }
               },
               "required": [
-                "file",
-                "first_line",
-                "last_line"
+                "version",
+                "theorem",
+                "module",
+                "statement",
+                "binders",
+                "conclusion",
+                "program",
+                "program_head",
+                "axioms",
+                "mapping",
+                "manifest",
+                "source",
+                "definitions",
+                "definitions_truncated",
+                "translation_rerun"
               ],
               "additionalProperties": false
             },
-            "definitions": {
-              "maxItems": 100,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema26"
-              }
-            },
-            "definitions_truncated": {
-              "type": "boolean"
-            },
-            "translation_rerun": {
-              "type": "boolean",
-              "const": false
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "creusot"
+                },
+                "version": {
+                  "type": "number",
+                  "const": 1
+                },
+                "signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000000,
+                  "$ref": "#/$defs/__schema3"
+                },
+                "requires": {
+                  "maxItems": 1000,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema27"
+                  }
+                },
+                "ensures": {
+                  "maxItems": 1000,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema28"
+                  }
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "first_line": {
+                      "exclusiveMinimum": 0,
+                      "$ref": "#/$defs/__schema9"
+                    },
+                    "last_line": {
+                      "exclusiveMinimum": 0,
+                      "$ref": "#/$defs/__schema9"
+                    }
+                  },
+                  "required": [
+                    "file",
+                    "first_line",
+                    "last_line"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "version",
+                "signature",
+                "requires",
+                "ensures",
+                "source"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": [
-            "version",
-            "theorem",
-            "module",
-            "statement",
-            "binders",
-            "conclusion",
-            "program",
-            "program_head",
-            "axioms",
-            "mapping",
-            "manifest",
-            "source",
-            "definitions",
-            "definitions_truncated",
-            "translation_rerun"
-          ],
-          "additionalProperties": false
-        },
-        "spec": {
-          "type": "object",
-          "properties": {
-            "version": {
-              "type": "number",
-              "const": 1
-            },
-            "signature": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000000,
-              "$ref": "#/$defs/__schema3"
-            },
-            "requires": {
-              "maxItems": 1000,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema27"
-              }
-            },
-            "ensures": {
-              "maxItems": 1000,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema28"
-              }
-            }
-          },
-          "required": [
-            "version",
-            "signature",
-            "requires",
-            "ensures"
-          ],
-          "additionalProperties": false
+          ]
         }
       },
       "required": [

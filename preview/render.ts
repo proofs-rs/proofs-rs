@@ -3,7 +3,6 @@ import {
   resolveContract,
   checkAnchor,
   formalSourceLinks,
-  specSourceLinks,
 } from "../web/formal-evidence";
 import { createViews } from "../src/site-views";
 import { pageLayout } from "../web/page-layout";
@@ -179,18 +178,6 @@ export function renderPreview(
     if (claim) {
       if (claim.evidence_ref) {
         const contract = resolveContract(snapshot.sarif, runId, claim);
-        if (contract?.spec) {
-          const source = snapshot.sarif.runs[0].versionControlProvenance[0];
-          claim.spec = {
-            ...specSourceLinks(
-              contract,
-              source.repositoryUri,
-              source.revisionId,
-            ),
-            check_url: `/runs/${encodeURIComponent(runId)}#${checkAnchor(contract.harness)}`,
-          };
-          if (localOnly) claim.spec.source_url = null;
-        }
         if (contract?.formal) {
           const source = snapshot.sarif.runs[0].versionControlProvenance[0];
           claim.formal_evidence = {
@@ -203,7 +190,7 @@ export function renderPreview(
           };
           if (localOnly) {
             claim.formal_evidence.source_url = null;
-            for (const d of claim.formal_evidence.definitions)
+            for (const d of claim.formal_evidence.definitions ?? [])
               d.source_url = null;
           }
         }
