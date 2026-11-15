@@ -13,6 +13,7 @@ use syn::{
 
 #[derive(Clone, Debug)]
 pub struct Contract {
+    pub spec: Option<CreusotSpec>,
     pub api_paths: Vec<String>,
     pub precondition: String,
     pub file: PathBuf,
@@ -20,7 +21,15 @@ pub struct Contract {
     pub last_line: usize,
     pub harness: String,
 }
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CreusotSpec {
+    pub version: u8,
+    pub signature: String,
+    pub requires: Vec<String>,
+    pub ensures: Vec<String>,
+}
 struct Function {
+    spec: Option<CreusotSpec>,
     path: String,
     module: Vec<String>,
     context: CallableContext,
@@ -423,6 +432,7 @@ fn public_contracts_from(
             "Ambiguous contract target {path}"
         );
         result.push(Contract {
+            spec: f.spec.clone(),
             api_paths: paths,
             precondition: if f.requires.is_empty() {
                 "true".into()
@@ -1111,6 +1121,7 @@ impl Scanner<'_> {
             return Ok(());
         };
         let mut requires = vec![];
+        let mut ensures = vec![];
         let mut annotated = false;
         let mut excluded = false;
         let mut target = None;
@@ -1132,12 +1143,22 @@ impl Scanner<'_> {
                             );
                     }
                 }
-                if self.creusot_attr(m, "requires", module)? {
+                let is_requires = self.creusot_attr(m, "requires", module)?;
+                if is_requires || self.creusot_attr(m, "ensures", module)? {
                     let Meta::List(l) = m else {
-                        bail!("Invalid Creusot requires attribute");
+                        bail!("Invalid Creusot specification attribute");
                     };
-                    ensure!(!l.tokens.is_empty(), "Empty Creusot requires attribute");
-                    requires.push(source_text(file, l.tokens.span())?);
+                    ensure!(
+                        !l.tokens.is_empty(),
+                        "Empty Creusot specification attribute"
+                    );
+                    let text = source_text(file, l.delimiter.span().join())?;
+                    let expression = text[1..text.len() - 1].to_owned();
+                    if is_requires {
+                        requires.push(expression);
+                    } else {
+                        ensures.push(expression);
+                    }
                 }
                 continue;
             }
@@ -1170,6 +1191,23 @@ impl Scanner<'_> {
             .collect::<Vec<_>>()
             .join("::");
         self.functions.push(Function {
+            spec: if self.creusot {
+                let signature_span = if matches!(vis, syn::Visibility::Public(_)) {
+                    vis.span()
+                        .join(sig.span())
+                        .context("Cannot locate function signature")?
+                } else {
+                    sig.span()
+                };
+                Some(CreusotSpec {
+                    version: 1,
+                    signature: source_text(file, signature_span)?,
+                    requires: requires.clone(),
+                    ensures,
+                })
+            } else {
+                None
+            },
             path,
             name,
             module: module.to_vec(),
@@ -1387,6 +1425,7 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
             "Contract target {identity} has no public API path"
         );
         result.push(Contract {
+            spec: None,
             api_paths,
             precondition,
             file: h.file.clone(),
@@ -1600,6 +1639,66 @@ mod tests {
         )
         .unwrap()
     }
+    #[test]
+    fn creusot_specs_preserve_source_and_active_aliases() {
+        let source = r#"use creusot_std::{requires as pre, ensures as post};
+// Unicode before spans: 日本語
+#[pre( /* input */ é@ > 0 )]
+#[cfg_attr(creusot, post(result@ == é@ + 1))]
+#[cfg_attr(not(creusot), post(false))]
+#[post(forall<i: Int> i >= 0 ==> result@ > i || i >= é@)]
+pub fn next<T>(é: u32, value: T) -> u32
+where T: Copy
+{ é + 1 }
+"#;
+        let c = creusot_contracts(source, CreusotTarget::Annotated);
+        let spec = c[0].spec.as_ref().unwrap();
+        assert_eq!(
+            spec.signature,
+            "pub fn next<T>(é: u32, value: T) -> u32\nwhere T: Copy"
+        );
+        assert_eq!(spec.requires, [" /* input */ é@ > 0 "]);
+        assert_eq!(
+            spec.ensures,
+            [
+                "result@ == é@ + 1",
+                "forall<i: Int> i >= 0 ==> result@ > i || i >= é@"
+            ]
+        );
+        assert_eq!(c[0].precondition, "( /* input */ é@ > 0 )");
+    }
+
+    #[test]
+    fn creusot_specs_include_methods_and_unannotated_targets() {
+        let c = creusot_contracts(
+            r#"pub struct S;
+impl S {
+    #[ensures((^self).value == 1)]
+    pub fn update(&mut self) {}
+}
+pub fn plain() {}
+"#,
+            CreusotTarget::All,
+        );
+        let method = c
+            .iter()
+            .find(|c| c.harness == "S::update")
+            .unwrap()
+            .spec
+            .as_ref()
+            .unwrap();
+        assert_eq!(method.signature, "pub fn update(&mut self)");
+        assert_eq!(method.ensures, ["(^self).value == 1"]);
+        let plain = c
+            .iter()
+            .find(|c| c.harness == "plain")
+            .unwrap()
+            .spec
+            .as_ref()
+            .unwrap();
+        assert!(plain.requires.is_empty() && plain.ensures.is_empty());
+    }
+
     #[test]
     fn creusot_pearlite_and_exclusions() {
         let source = r#"use creusot_std::prelude::*;

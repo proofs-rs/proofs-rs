@@ -457,6 +457,17 @@ export function createViews(
     ${c.explanation ? `<section class="report-section report-explanation"><h2>Overview</h2><div class="markdown-body">${renderMarkdown(c.explanation, 2)}</div></section>` : options.preview ? '<p class="claim-explanation-missing" role="note"><strong>No claim explanation.</strong> Readers will rely on the report Overview to learn what this claim guarantees, under which conditions, and what it leaves unverified.</p>' : `<p class="claim-explanation-missing meta">This claim has no explanation of its own. ${c.report_id ? `Read the <a href="${esc(external(`/report/${enc(String(c.report_id))}#overview`))}">report Overview</a>, and treat` : "Treat"} the ${c.formal_evidence ? "formal statement" : "preconditions and evidence"} below as authoritative. See <a href="${esc(external("/book/concepts.html"))}">Concepts and terminology</a>.</p>`}
     <section class="report-section"><h2>Preconditions</h2><p class="plain-text code">${esc(c.precondition || (c.evidence_ref ? "See the formal statement, including input types and instances, for conditions." : "None stated"))}</p></section>
     ${c.formal_evidence ? formalStatement(c.formal_evidence) : ""}
+    ${
+      c.spec
+        ? `<section class="report-section creusot-spec"><h2>Creusot specification</h2><pre tabindex="0"><code>${esc(
+            [
+              ...c.spec.requires.map((r: string) => `#[requires(${r})]`),
+              ...c.spec.ensures.map((r: string) => `#[ensures(${r})]`),
+              c.spec.signature,
+            ].join("\n"),
+          )}</code></pre><p>${c.spec.source_url ? `<a href="${esc(c.spec.source_url)}">Source at recorded commit</a>` : "Source is in the local snapshot"} · <a href="${esc(c.spec.check_url)}">Recorded check</a></p></section>`
+        : ""
+    }
     ${c.evidence_url ? `<section class="report-section"><h2>Evidence</h2><p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p></section>` : ""}
     ${c.shared_trusted_assumptions || c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2>${claimScope(c.shared_trusted_assumptions, c.trusted_assumptions)}</section>` : ""}
     ${c.shared_limitations || c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${claimScope(c.shared_limitations, c.limitations)}${toolLimitations(c)}</section>` : ""}`;

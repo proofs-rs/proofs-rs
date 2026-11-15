@@ -40,8 +40,24 @@ private items, and APIs without a public path. Trait declarations,
 macro-generated APIs, and glob reexports are not discovered.
 
 `requires` keeps its original Pearlite text as the Claim's precondition; several
-predicates are joined with `&&`, and absence means `true`. `ensures` only selects
-an API. Describe the verified behavior in the Report and Claim explanations.
+predicates are parenthesized and joined with `&&`, and absence means `true`.
+The recording also captures the function signature and each active `requires`
+and `ensures` expression, preserving their original spacing and comments.
+Postconditions remain separate from preconditions.
+
+## Review the recorded specification
+
+Both the local preview and the published Claim page show a **Creusot
+specification** section with the signature, preconditions and postconditions.
+For example, a mutable reference's final value can appear as `(^x)@` in an
+`ensures` expression. The section links to the source at the recorded Git commit
+and to the corresponding recorded check.
+
+The displayed specification comes from the selected verification recording,
+not from the current working tree or editable Claim explanation. Describe the
+meaning of the specification and its limits in the Report and Claim explanations.
+Older recordings remain readable; rerun verification to capture and display
+their specifications.
 
 ## What a run must show
 

@@ -2,7 +2,7 @@ import { apiOrigin, apiObservation, visibleAPI } from "./recorded-api-sql";
 import { zulipEvent } from "./zulip";
 import { findings, validateFinding, findingStatements } from "./findings";
 import { decodeEvidence } from "./core";
-import { claimFormalEvidence } from "./runs";
+import { claimEvidence } from "./runs";
 import { claimTitle } from "../web/claim-title";
 import { operation } from "./openapi";
 import * as S from "./schemas";
@@ -639,6 +639,7 @@ api.get(
     S.claim.extend({
       my_star: S.z.boolean(),
       formal_evidence: S.formalDetail.nullable().optional(),
+      spec: S.creusotSpecDetail.nullable().optional(),
     }),
     {
       tags: ["Claims"],
@@ -659,7 +660,7 @@ api.get(
     if (!item) throw new Fault(404, "claim_not_found");
     return c.json({
       ...item,
-      formal_evidence: await claimFormalEvidence(c, item),
+      ...(await claimEvidence(c, item)),
       my_star: !!(await one(
         c.env.DB,
         "SELECT 1 FROM claim_stars WHERE claim_id=? AND user_id=?",

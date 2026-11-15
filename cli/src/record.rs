@@ -12,6 +12,8 @@ use std::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contract {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<scan::CreusotSpec>,
     pub api_paths: Vec<String>,
     pub precondition: String,
     pub file: String,
@@ -379,6 +381,7 @@ pub fn run(args: &ProjectArgs, mut command: Vec<String>) -> Result<()> {
         .iter()
         .map(|c| {
             Ok(Contract {
+                spec: c.spec.clone(),
                 formal: None,
                 api_paths: c
                     .api_paths
@@ -1069,6 +1072,7 @@ mod tests {
     use super::*;
     fn contract() -> Contract {
         Contract {
+            spec: None,
             formal: None,
             api_paths: vec!["demo::f".into()],
             precondition: "true".into(),

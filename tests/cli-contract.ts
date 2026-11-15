@@ -245,7 +245,7 @@ for (const c of manifest.cases)
         return {
           api_item_id: a.api_item_id,
           precondition: p.contracts[i].precondition,
-          ...(p.contracts[i].formal
+          ...(p.contracts[i].formal || p.contracts[i].spec
             ? { evidence_ref: { run_id: rid, harness: p.contracts[i].harness } }
             : {}),
         };
@@ -261,9 +261,15 @@ for (const c of manifest.cases)
       if (claim.evidence_ref) {
         const detail = await request(`/claims/${claim.id}`);
         assert.equal(detail.status, 200);
-        const formal = p.contracts.find(
+        const contract = p.contracts.find(
           (x: any) => x.harness === claim.evidence_ref.harness,
-        ).formal;
+        );
+        if (contract.spec) {
+          retained(detail.body.spec, contract.spec);
+          assert.equal(detail.body.formal_evidence, null);
+          continue;
+        }
+        const formal = contract.formal;
         assert.equal(detail.body.formal_evidence.theorem, formal.theorem);
         assert.equal(detail.body.formal_evidence.statement, formal.statement);
         assert.equal(detail.body.formal_evidence.mapping, formal.mapping);

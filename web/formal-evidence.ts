@@ -1,3 +1,5 @@
+import type { z, creusotSpec } from "../src/schemas";
+
 /** An explicit reference never falls back to prose matching. Shared by detail and Reproduce. */
 export function resolveContract(sarif: any, runId: string, claim: any) {
   const contracts = sarif.runs[0].properties.proofs.contracts;
@@ -8,7 +10,7 @@ export function resolveContract(sarif: any, runId: string, claim: any) {
     if (
       matches.length !== 1 ||
       !matches[0].api_paths.includes(claim.display_path) ||
-      matches[0].formal?.theorem !== ref.harness
+      !(matches[0].formal?.theorem === ref.harness || matches[0].spec)
     )
       return null;
     return matches[0];
@@ -26,6 +28,23 @@ export const checkAnchor = (harness: string) =>
   Array.from(new TextEncoder().encode(harness), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
+
+/** Project a validated Creusot contract onto its immutable recorded source. */
+export function specSourceLinks(
+  contract: {
+    spec: z.infer<typeof creusotSpec>;
+    file: string;
+    first_line: number;
+    last_line: number;
+  },
+  repository: string,
+  commit: string,
+) {
+  return {
+    ...contract.spec,
+    source_url: `${repository}/blob/${commit}/${contract.file.split("/").map(encodeURIComponent).join("/")}#L${contract.first_line}-L${contract.last_line}`,
+  };
+}
 
 /** Resolve only source locations recorded for this exact revision. */
 export function formalSourceLinks(

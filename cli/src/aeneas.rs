@@ -527,6 +527,7 @@ fn concrete_public_apis(project: &Project, tool: &Tool) -> Result<Vec<scan::Cont
         .proofs
         .iter()
         .map(|p| scan::Contract {
+            spec: None,
             api_paths: vec![p.api.clone()],
             precondition: String::new(),
             file: project.root_source.clone(),
@@ -570,6 +571,7 @@ pub fn discover(project: &Project, tool: &Tool) -> Result<Vec<scan::Contract>> {
             let text = fs::read_to_string(&file)?;
             ensure!(!text.trim().is_empty(), "Empty Lean proof source");
             Ok(scan::Contract {
+                spec: None,
                 api_paths: found[0].api_paths.clone(),
                 precondition: proof.precondition.clone(),
                 file,
@@ -1035,6 +1037,7 @@ pub fn extract(
             .entry(found[0].api_paths[0].clone())
             .or_default()
             .push(crate::record::Contract {
+                spec: None,
                 api_paths: found[0]
                     .api_paths
                     .iter()

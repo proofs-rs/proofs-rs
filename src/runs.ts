@@ -9,6 +9,7 @@ import {
   resolveContract,
   checkAnchor,
   formalSourceLinks,
+  specSourceLinks,
   validLeanSegments,
 } from "../web/formal-evidence";
 import { operation } from "./openapi";
@@ -195,7 +196,9 @@ export function readRecord(sarif: any) {
     b.contracts.length > S.MAX_REPORT_CLAIMS
   )
     throw new Fault(400, "invalid_run_contracts");
-  const formalRun = b.contracts.some((c: any) => c.formal !== undefined);
+  const formalRun = b.contracts.some(
+    (c: any) => c.formal !== undefined || c.spec !== undefined,
+  );
   if (
     formalRun &&
     new Set(b.contracts.map((c: any) => c.harness)).size !== b.contracts.length
@@ -220,6 +223,20 @@ export function readRecord(sarif: any) {
       throw new Fault(400, "invalid_run_contract");
   }
   for (const contract of b.contracts) {
+    if (contract.spec !== undefined) {
+      const spec: S.z.infer<typeof S.creusotSpec> = contract.spec;
+      const precondition = spec.requires.length
+        ? spec.requires.map((r: string) => `(${r})`).join(" && ")
+        : "true";
+      if (
+        s.tool.driver.name.toLowerCase() !== "creusot" ||
+        contract.formal !== undefined ||
+        contract.precondition !== precondition ||
+        !spec.signature.trim() ||
+        [...spec.requires, ...spec.ensures].some((text: string) => !text.trim())
+      )
+        throw new Fault(400, "invalid_creusot_spec");
+    }
     if (contract.formal !== undefined) {
       const f = contract.formal;
       if (
@@ -600,16 +617,17 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
   for (const claim of v.claims) {
     if (claim.evidence_ref != null) {
       const sarif = records.get(claim.evidence_ref.run_id);
-      if (
-        !sarif ||
-        !resolveContract(sarif, claim.evidence_ref.run_id, claim)?.formal
-      )
+      const contract = sarif
+        ? resolveContract(sarif, claim.evidence_ref.run_id, claim)
+        : null;
+      if (!contract || !(contract.formal || contract.spec))
         throw new Fault(400, "invalid_evidence_ref");
     } else if (
       !claim.precondition.trim() ||
       !contracts.some(
         (x) =>
           !x.formal &&
+          !x.spec &&
           x.api_paths.includes(claim.display_path) &&
           x.precondition === claim.precondition,
       )
@@ -635,7 +653,9 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
           claim.evidence_ref
             ? claim.evidence_ref.run_id !== rid ||
               claim.evidence_ref.harness !== contract.harness
-            : contract.formal || contract.precondition !== claim.precondition
+            : contract.formal ||
+              contract.spec ||
+              contract.precondition !== claim.precondition
         )
           continue;
         if (
@@ -656,8 +676,8 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
 }
 
 /** Only detail requests load the referenced SARIF; lists retain the small revision reference. */
-export async function claimFormalEvidence(c: Ctx, claim: any) {
-  if (!claim.evidence_ref) return null;
+export async function claimEvidence(c: Ctx, claim: any) {
+  if (!claim.evidence_ref) return { formal_evidence: null, spec: null };
   const ref = claim.evidence_ref;
   const run = await one(
     c.env.DB,
@@ -670,13 +690,29 @@ export async function claimFormalEvidence(c: Ctx, claim: any) {
   const sarif = await (await readStored(c, run)).json();
   const record = readRecord(sarif);
   const contract = resolveContract(sarif, ref.run_id, claim);
-  if (!contract?.formal) throw new Fault(400, "invalid_evidence_ref");
+  if (!contract || !(contract.formal || contract.spec))
+    throw new Fault(400, "invalid_evidence_ref");
+  const check_url = `/runs/${ref.run_id}?report=${claim.report_id}&v=${claim.report_revision}#${checkAnchor(ref.harness)}`;
   return {
-    ...formalSourceLinks(
-      contract.formal,
-      record.source.repository,
-      record.source.commit,
-    ),
-    check_url: `/runs/${ref.run_id}?report=${claim.report_id}&v=${claim.report_revision}#${checkAnchor(ref.harness)}`,
+    formal_evidence: contract.formal
+      ? {
+          ...formalSourceLinks(
+            contract.formal,
+            record.source.repository,
+            record.source.commit,
+          ),
+          check_url,
+        }
+      : null,
+    spec: contract.spec
+      ? {
+          ...specSourceLinks(
+            contract,
+            record.source.repository,
+            record.source.commit,
+          ),
+          check_url,
+        }
+      : null,
   };
 }

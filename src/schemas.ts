@@ -197,6 +197,16 @@ const leanSegments = z
     }),
   )
   .max(10000);
+export const creusotSpec = z.strictObject({
+  version: z.literal(1),
+  signature: string.min(1).max(1000000),
+  requires: z.array(string.min(1).max(1000000)).max(1000),
+  ensures: z.array(string.min(1).max(1000000)).max(1000),
+});
+export const creusotSpecDetail = creusotSpec.extend({
+  source_url: string,
+  check_url: string,
+});
 export const formalEvidence = z.strictObject({
   version: z.literal(1),
   theorem: string.min(1).max(1000),
@@ -779,6 +789,7 @@ export const sarif = z
                     api_paths: z.array(string).min(1),
                     precondition: string,
                     formal: formalEvidence.optional(),
+                    spec: creusotSpec.optional(),
                   }),
                 )
                 .min(1)
