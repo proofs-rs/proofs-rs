@@ -716,7 +716,15 @@ textarea {
   margin-bottom: 4px;
 }
 .report-apis .catalog-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.inline-spec {
+  min-width: 0;
+}
+.inline-spec pre,
+.inline-spec .lean-expression {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .report-apis .api-family > summary {
   grid-template-columns: minmax(0, 1fr);
@@ -946,4 +954,181 @@ textarea {
   width: 1em;
   height: 1em;
   object-fit: contain;
+}
+
+.report-apis .api-contract {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.report-apis .api-contract code {
+  font: inherit;
+}
+
+/* API declarations follow rustdoc's item headings and declaration blocks. */
+.report-apis .catalog-row {
+  display: block;
+  border: 0;
+  padding: 14px 0 18px;
+}
+.api-doc {
+  min-width: 0;
+}
+.api-doc-heading {
+  font:
+    600 18px/1.4 system-ui,
+    sans-serif;
+  border-bottom: 1px solid var(--heading-rule, #ddd);
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+.api-doc-heading code {
+  display: block;
+  font-size: 0.82em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.report-apis .api-contract {
+  display: block;
+  background: var(--surface, #f5f5f5);
+  border-radius: 4px;
+  padding: 14px 16px;
+  line-height: 1.55;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.report-apis .api-contract .api-name {
+  font-size: inherit;
+  font-weight: 600;
+}
+.report-apis .contract-attribute {
+  color: #80512b;
+}
+
+/* Contract cards group each API's signature, clauses, and evidence. */
+.report-apis .api-doc {
+  border: 1px solid var(--line, #d4d4d4);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.report-apis .api-doc-heading {
+  background: var(--surface, #f5f5f5);
+  border-bottom: 1px solid var(--line, #ddd);
+  margin: 0;
+  padding: 14px 16px;
+}
+.api-doc-path {
+  margin-top: 5px;
+  font:
+    400 13px/1.4 system-ui,
+    sans-serif;
+  overflow-wrap: anywhere;
+}
+.report-apis .api-contract {
+  background: transparent;
+  border-radius: 0;
+  padding: 0 16px;
+}
+.contract-number {
+  font-weight: 600;
+}
+.contract-clause {
+  padding: 10px 0;
+}
+.contract-label {
+  font:
+    600 11px/1.4 system-ui,
+    sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted, #666);
+  margin-bottom: 6px;
+}
+.report-apis .contract-clause pre {
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.contract-evidence {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 12px 0;
+  color: var(--muted, #666);
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+.report-apis .api-doc-heading {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  list-style: none;
+}
+.report-apis .api-doc-heading::-webkit-details-marker {
+  display: none;
+}
+.report-apis .api-doc-heading::before {
+  content: "▸";
+  color: #777;
+  flex: none;
+}
+.report-apis .api-doc[open] > .api-doc-heading::before {
+  content: "▾";
+}
+.report-apis .api-doc-heading code {
+  flex: 1;
+  min-width: 0;
+}
+.report-apis .rust-keyword {
+  color: #8959a8;
+  font-weight: 600;
+}
+.api-doc-comment {
+  margin: 0 -16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line, #e5e5e5);
+}
+.api-doc-comment p {
+  margin: 0;
+}
+.contract-evidence {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.api-doc-wrap {
+  position: relative;
+  min-width: 0;
+}
+.report-apis .api-doc-wrap:has(.api-source) .api-doc-heading {
+  padding-right: 140px;
+}
+.api-source {
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+.report-apis .api-doc {
+  border-color: #e5e5e5;
+}
+@media (max-width: 600px) {
+  .report-apis .api-doc-wrap:has(.api-source) .api-doc-heading {
+    padding-right: 14px;
+  }
+  .api-source {
+    position: static;
+    justify-content: flex-end;
+    margin: 5px 16px 0;
+  }
 }

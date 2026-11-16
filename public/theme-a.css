@@ -533,6 +533,14 @@ html:not([data-theme="base"])
   max-width: 72ch;
 }
 
+/* The divider spans the API item; limit only its text measure. */
+html:not([data-theme="base"]) .report-apis .api-doc-comment {
+  max-width: none;
+}
+html:not([data-theme="base"]) .report-apis .api-doc-comment > * {
+  max-width: 72ch;
+}
+
 /* Report filters */
 html:not([data-theme="base"]) .report-filters {
   display: flex;

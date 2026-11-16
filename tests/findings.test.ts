@@ -751,10 +751,7 @@ test("Report and crate pages render findings, owner forms, safe links and curren
   };
   let dom = await html(`/report/${report}`);
   let d = dom.window.document;
-  assert.equal(
-    d.querySelector(".report-explanation")?.nextElementSibling?.id,
-    "findings",
-  );
+  assert.equal(d.querySelector(".report-explanation"), null);
   assert.match(
     d.querySelector(".report-outcome")!.textContent!,
     /1 verified claim · 1 finding\b/,

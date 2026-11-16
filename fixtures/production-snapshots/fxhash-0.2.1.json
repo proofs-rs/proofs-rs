@@ -1,0 +1,10 @@
+{
+  "original_report": "https://proofs.rs/report/37?v=1",
+  "run_id": "07d342d1-6048-4d57-a271-73310cb964f5",
+  "sha256": "8882d24892452d0f6d500a7af972a9a42c1d9512defd70fd6a59f83e9238590b",
+  "size": 401645,
+  "r2_key": "public-snapshots/fxhash-0.2.1/07d342d1-6048-4d57-a271-73310cb964f5/8882d24892452d0f6d500a7af972a9a42c1d9512defd70fd6a59f83e9238590b.sarif.json",
+  "report_key": "public-snapshot-fxhash-0.2.1-report-37-v1",
+  "claim_count": 24,
+  "author_id": "16daa6d1-7c9a-5607-b896-c695bdb36022"
+}

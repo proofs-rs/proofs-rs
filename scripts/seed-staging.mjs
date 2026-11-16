@@ -159,11 +159,23 @@ const layoutReport = JSON.parse(await readPage(`/api/v1/reports/${layoutID}`));
 if (layoutReport.claims.length !== 8 || layoutReport.run_ids.length !== 2)
   throw Error("Layout report contents mismatch");
 const reportHTML = await readPage(`/report/${layoutID}`);
-for (const claim of layoutReport.claims) {
-  if (!reportHTML.includes(`/claim/${claim.id}?report_revision=55`))
-    throw Error("Report claim link missing");
-  await readPage(`/claim/${claim.id}`);
-}
+if (
+  (reportHTML.match(/class="inline-spec"/g) || []).length !==
+  layoutReport.claims.length
+)
+  throw Error("Report inline specifications missing");
+const specDemo = await readPage("/spec-demo");
+if (
+  !specDemo.includes('id="predicate-valid-index"') ||
+  !specDemo.includes("api-doc-comment")
+)
+  throw Error("Specification demo missing");
+const clockDemo = await readPage("/clock-dbm-demo");
+if (
+  !clockDemo.includes("clock-dbm 0.1.0") ||
+  !clockDemo.includes("Recorded precondition")
+)
+  throw Error("Public report preview missing");
 const catalogue = JSON.parse(
   await readPage("/api/v1/crates/report-layout-demo/1.0.0-demo.1/apis"),
 );

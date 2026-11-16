@@ -108,11 +108,7 @@ test("preview uses production report, claim, Markdown and recorded-run rendering
   );
   const preview = new JSDOM(renderPreview(data, "/report").html);
   const production = new JSDOM(views.reportBody(data.report));
-  for (const selector of [
-    ".report-explanation",
-    ".report-limitations",
-    ".report-environment",
-  ]) {
+  for (const selector of [".report-limitations", ".report-environment"]) {
     assert.equal(
       preview.window.document.querySelector(selector)!.textContent,
       production.window.document.querySelector(selector)!.textContent,
@@ -179,18 +175,10 @@ test("preview routes stay local, metadata links use configured origin, and no ac
   assert(d.body.textContent.includes("New report"));
   assert(!d.body.textContent.includes("Report #null"));
   assert(d.querySelector('a[href="/claim/preview-claim-0"]'));
-  assert.equal(
-    d.querySelector(".api-name")!.getAttribute("href"),
-    "/claim/preview-claim-0",
-  );
+  assert.equal(d.querySelector(".api-doc-path"), null);
   assert.equal(
     d.querySelector('a[href="https://staging.example/api/api-f"]'),
     null,
-  );
-  assert.equal(
-    renderPreview(data, d.querySelector(".api-name")!.getAttribute("href")!)
-      .status,
-    200,
   );
   assert(d.querySelector('a[href="https://staging.example/report/42?v=2"]'));
   assert(
@@ -292,10 +280,7 @@ test("Finding drafts appear after Overview, remain separate from successful chec
   const result = renderPreview(snapshot, "/report");
   const dom = new JSDOM(result.html),
     d = dom.window.document;
-  assert.equal(
-    d.querySelector(".report-explanation")!.nextElementSibling!.id,
-    "findings",
-  );
+  assert.equal(d.querySelector(".report-explanation"), null);
   assert.match(
     d.querySelector(".report-outcome")!.textContent!,
     /1 verified claim · 1 finding\b/,

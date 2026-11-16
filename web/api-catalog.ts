@@ -89,6 +89,9 @@ export function renderAPICatalog(
     hideCounts?: boolean;
     expandFamilies?: boolean;
     details?: (api: CatalogAPI) => string;
+    contract?: (api: CatalogAPI) => string;
+    docs?: (api: CatalogAPI) => string;
+    source?: (api: CatalogAPI) => string;
     apiHref?: (id: string) => string | null;
   } = {},
 ): string {
@@ -133,7 +136,7 @@ export function renderAPICatalog(
   const label = (a: CatalogAPI, text: string, keyword: string) =>
     `<span class="api-label">${unsafe(!!a.is_unsafe)}<span class="api-keyword">${keyword}</span>${link(a, text)}</span>`;
   const row = (a: CatalogAPI, text: string, keyword = "fn ") =>
-    `<div class="catalog-row" data-api-path="${esc(a.display_path)}" data-claims="${a.claim_count}"${a.finding_count === undefined ? "" : ` data-findings="${a.finding_count}"`}><span>${a.origin === "recorded" ? `${link(a, local(a.display_path))} <span class="meta">recorded callable · signature and safety not recorded</span>` : (keyword && declared(a, text)) || label(a, text, keyword)}</span>${options.details ? options.details(a) : claimCounts(a)}</div>`;
+    `<div class="catalog-row" data-api-path="${esc(a.display_path)}" data-claims="${a.claim_count}"${a.finding_count === undefined ? "" : ` data-findings="${a.finding_count}"`}>${options.contract ? `<div class="api-doc-wrap"><details class="api-doc" open><summary class="api-doc-heading"><code>${esc(a.signature ? a.signature.replace(/^impl[^\n]*\n/, "").trim() : a.display_path).replace(/\b(pub|fn|mut|unsafe|async|const|impl|where)\b/g, '<span class="rust-keyword">$1</span>')}</code></summary><div class="api-contract">${options.contract(a)}${options.docs ? options.docs(a) : ""}</div></details>${options.source ? options.source(a) : ""}</div>` : `<span>${a.origin === "recorded" ? `${link(a, local(a.display_path))} <span class="meta">recorded callable · signature and safety not recorded</span>` : (keyword && declared(a, text)) || label(a, text, keyword)}</span>`}${options.details ? options.details(a) : claimCounts(a)}</div>`;
   const data = apis
     .map(describe)
     .sort(

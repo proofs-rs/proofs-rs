@@ -1,3 +1,11 @@
+import { readRecord } from "./runs";
+import {
+  checkAnchor,
+  formalSourceLinks,
+  resolveContract,
+} from "../web/formal-evidence";
+import { clockDbmDemo } from "./clock-dbm-demo";
+import { uiDemo } from "./ui-demo";
 import { reportShare } from "../web/report-share";
 import { resolveSocialCard, cardMetadata } from "./social-card";
 import { reportFindings } from "./findings";
@@ -94,6 +102,8 @@ const pageNames = new Set([
   "about",
   "publish",
   "runs",
+  "spec-demo",
+  "clock-dbm-demo",
 ]);
 export function isSitePage(path: string) {
   const parts = path.split("/").filter(Boolean);
@@ -285,6 +295,19 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       reportOutline,
       claimContent,
     } = v;
+    if (p === "clock-dbm-demo") {
+      if (c.env.ENVIRONMENT !== "staging" && c.env.ENVIRONMENT !== "local-demo")
+        throw new Fault(404, "page_not_found");
+      return result(
+        "clock-dbm 0.1.0",
+        `<h1>clock-dbm 0.1.0</h1><p class="meta">Public report snapshot · <a href="https://proofs.rs/report/38">Original report</a> · Creusot 0.14.0</p><p class="meta">This report does not contain recorded formal specifications; the preconditions shown are the published report data.</p>${reportAPIs(clockDbmDemo)}`,
+      );
+    }
+    if (p === "spec-demo") {
+      if (c.env.ENVIRONMENT !== "staging" && c.env.ENVIRONMENT !== "local-demo")
+        throw new Fault(404, "page_not_found");
+      return result("Specification UI demo", uiDemo(reportAPIs));
+    }
     const search = (q = "") =>
       `<form action="/crates" method="get" class="searchbar"><input name="q" value="${esc(q)}" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form>`;
     const login = () =>
@@ -628,15 +651,23 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         // Parse one potentially large SARIF record at a time to bound Worker memory.
         for (const [index, run] of (item.run_ids as string[]).entries()) {
           try {
-            recorded.push(
-              renderRecordedRun(
-                await get(`/runs/${enc(run)}/sarif`),
-                run,
-                index,
-                item,
-                true,
-              ),
-            );
+            const sarif = await get(`/runs/${enc(run)}/sarif`);
+            const record = readRecord(sarif);
+            for (const claim of item.claims) {
+              if (claim.evidence_ref?.run_id !== run) continue;
+              const contract = resolveContract(sarif, run, claim);
+              if (!contract?.formal)
+                throw new Fault(400, "invalid_evidence_ref");
+              claim.formal_evidence = {
+                ...formalSourceLinks(
+                  contract.formal,
+                  record.source.repository,
+                  record.source.commit,
+                ),
+                check_url: `/runs/${enc(run)}?report=${item.id}&v=${item.revision_no}#${checkAnchor(contract.harness)}`,
+              };
+            }
+            recorded.push(renderRecordedRun(sarif, run, index, item, true));
           } catch {
             recorded.push(
               `<p role="alert">Unable to load recorded run. <a href="/runs/${enc(run)}?report=${item.id}&amp;v=${item.revision_no}">View run</a></p>`,
