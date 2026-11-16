@@ -983,11 +983,10 @@ textarea {
   margin-bottom: 10px;
 }
 .api-doc-heading code {
-  font-size: 0.95em;
-}
-.api-doc-kind {
-  color: var(--muted, #666);
-  font-weight: 400;
+  display: block;
+  font-size: 0.82em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .report-apis .api-contract {
   display: block;

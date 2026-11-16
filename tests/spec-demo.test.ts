@@ -21,7 +21,7 @@ test("spec demo shows inline examples and evaluates only the sample predicates",
   const row = d.querySelector('[data-api-path="demo::get"]')!;
   assert.match(
     row.querySelector(".api-doc-heading")!.textContent!,
-    /Function\s+get/,
+    /pub fn get<T>\(items: &\[T\], index: usize\) -> Option<&T>/,
   );
   const code = row.querySelector("pre code")!;
   assert.match(
