@@ -416,7 +416,7 @@ export function createViews(
                     )
                     .join("");
                 };
-                return `<span class="inline-spec">${label}${f.requires.map((r: string, i: number) => `#[requires(${render(r, f.requires_segments?.[i])})]\n`).join("")}${f.ensures.map((r: string) => `#[ensures(${esc(r)})]\n`).join("")}</span>`;
+                return `<span class="inline-spec">${label}${f.requires.map((r: string, i: number) => `<span class="contract-attribute">#[requires</span>(${render(r, f.requires_segments?.[i])})<span class="contract-attribute">]</span>\n`).join("")}${f.ensures.map((r: string) => `<span class="contract-attribute">#[ensures</span>(${esc(r)})<span class="contract-attribute">]</span>\n`).join("")}</span>`;
               }
               const definitions = new Map<string, any>(
                 f.definitions.map((d: any) => [d.name, d]),

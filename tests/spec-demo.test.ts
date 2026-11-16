@@ -18,7 +18,12 @@ test("spec demo shows inline examples and evaluates only the sample predicates",
     2,
   );
   assert.equal(d.querySelectorAll('a[href^="/claim/"]').length, 0);
-  const code = d.querySelector('[data-api-path="demo::get"] pre code')!;
+  const row = d.querySelector('[data-api-path="demo::get"]')!;
+  assert.match(
+    row.querySelector(".api-doc-heading")!.textContent!,
+    /Function\s+get/,
+  );
+  const code = row.querySelector("pre code")!;
   assert.match(
     code.textContent!,
     /#\[requires\(valid_index\(index, items\.len\(\)\)\)\][\s\S]*pub fn get/,
