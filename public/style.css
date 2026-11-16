@@ -1032,8 +1032,7 @@ textarea {
   font-weight: 600;
 }
 .contract-clause {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line, #e5e5e5);
+  padding: 10px 0;
 }
 .contract-label {
   font:
@@ -1119,13 +1118,6 @@ textarea {
     sans-serif;
 }
 
-/* Separate the contract expressions from documentation without enlarging the item. */
-.report-apis .contract-clause pre {
-  background: #f5f5f5;
-  border-radius: 3px;
-  padding: 8px 10px;
-  line-height: 1.55;
-}
 .report-apis .api-doc {
   border-color: #e5e5e5;
 }
