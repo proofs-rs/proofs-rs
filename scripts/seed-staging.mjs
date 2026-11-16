@@ -170,6 +170,12 @@ if (
   !specDemo.includes("api-doc-comment")
 )
   throw Error("Specification demo missing");
+const clockDemo = await readPage("/clock-dbm-demo");
+if (
+  !clockDemo.includes("clock-dbm 0.1.0") ||
+  !clockDemo.includes("Recorded precondition")
+)
+  throw Error("Public report preview missing");
 const catalogue = JSON.parse(
   await readPage("/api/v1/crates/report-layout-demo/1.0.0-demo.1/apis"),
 );

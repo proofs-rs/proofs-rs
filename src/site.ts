@@ -1,4 +1,5 @@
 import { claimFormalEvidence } from "./runs";
+import { clockDbmDemo } from "./clock-dbm-demo";
 import { uiDemo } from "./ui-demo";
 import { reportShare } from "../web/report-share";
 import { resolveSocialCard, cardMetadata } from "./social-card";
@@ -97,6 +98,7 @@ const pageNames = new Set([
   "publish",
   "runs",
   "spec-demo",
+  "clock-dbm-demo",
 ]);
 export function isSitePage(path: string) {
   const parts = path.split("/").filter(Boolean);
@@ -288,6 +290,14 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       reportOutline,
       claimContent,
     } = v;
+    if (p === "clock-dbm-demo") {
+      if (c.env.ENVIRONMENT !== "staging" && c.env.ENVIRONMENT !== "local-demo")
+        throw new Fault(404, "page_not_found");
+      return result(
+        "clock-dbm 0.1.0",
+        `<h1>clock-dbm 0.1.0</h1><p class="meta">Public report snapshot · <a href="https://proofs.rs/report/38">Original report</a> · Creusot 0.14.0</p><p class="meta">This report does not contain recorded formal specifications; the preconditions shown are the published report data.</p>${reportAPIs(clockDbmDemo)}`,
+      );
+    }
     if (p === "spec-demo") {
       if (c.env.ENVIRONMENT !== "staging" && c.env.ENVIRONMENT !== "local-demo")
         throw new Fault(404, "page_not_found");

@@ -400,7 +400,10 @@ export function createViews(
           const evidence = (groups.get(api.id) ?? [])
             .map((claim) => claim.formal_evidence)
             .filter(Boolean);
-          const source = evidence.find((f) => f.source_url)?.source_url;
+          const source =
+            evidence.find((f) => f.source_url)?.source_url ??
+            (groups.get(api.id) ?? []).find((claim) => claim.source_url)
+              ?.source_url;
           const proofs = [
             ...new Set<string>(
               evidence.map((f) => f.check_url).filter(Boolean),
@@ -425,7 +428,7 @@ export function createViews(
                   : "";
 
               if (!f)
-                return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}</div>`;
+                return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">No spec</p>'}</div>`;
               if (f.kind === "creusot") {
                 const render = (value: string, segments?: any[]) => {
                   if (!c.synthetic || !validLeanSegments(value, segments))
@@ -440,27 +443,10 @@ export function createViews(
                 };
                 return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Requires</div><pre><code>${f.requires.length ? f.requires.map((r: string, i: number) => render(r, f.requires_segments?.[i])).join("\n") : "None recorded"}</code></pre></div><div class="contract-clause"><div class="contract-label">Ensures</div><pre><code>${f.ensures.length ? f.ensures.map((r: string) => esc(r)).join("\n") : "None recorded"}</code></pre></div></div>`;
               }
-              const definitions = new Map<string, any>(
-                f.definitions.map((d: any) => [d.name, d]),
+              const definitions = f.definitions.filter(
+                (d: any) => d.source_url,
               );
-              const expression = (value: string, parts?: any[]) =>
-                validLeanSegments(value, parts)
-                  ? parts!
-                      .map((p: any) => {
-                        const d = p.ref ? definitions.get(p.ref) : null;
-                        return d?.source_url
-                          ? `<a href="${esc(d.source_url)}">${esc(p.text)}</a>`
-                          : esc(p.text);
-                      })
-                      .join("")
-                  : esc(value);
-              const binders = f.binders
-                .map(
-                  (b: any) =>
-                    `(${esc(b.name)} : ${expression(b.type, b.type_segments)})`,
-                )
-                .join(" ");
-              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}</code></pre></div></div>`;
+              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${esc(f.statement)}</code></pre></div>${definitions.length ? `<p class="meta">Definitions: ${definitions.map((d: any) => `<a href="${esc(d.source_url)}"><code>${esc(d.name)}</code></a>`).join(", ")}</p>` : ""}</div>`;
             })
             .join(""),
         details: (api) => {

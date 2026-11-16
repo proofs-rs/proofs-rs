@@ -414,10 +414,7 @@ test("report APIs include finding-only APIs and combine associations without dup
   assert.equal(d.querySelectorAll('a[href="/finding/f"]').length, 2);
   assert.equal(d.querySelectorAll('[data-api-path="demo::checked"]').length, 1);
   const shared = d.querySelector('[data-api-path="demo::read"]')!;
-  assert.match(
-    shared.textContent!,
-    /Specification unavailable.*Finding: Signed <read>/s,
-  );
+  assert.match(shared.textContent!, /No spec.*Finding: Signed <read>/s);
   assert.equal(shared.querySelector("read"), null);
   dom.window.close();
 });

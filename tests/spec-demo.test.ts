@@ -48,6 +48,11 @@ test("API contracts, type invariants and predicate definitions use collapsible c
     api.querySelector('a[href="#demo-check"]')!.parentElement,
   );
   assert.equal(source.closest("details"), null);
+  assert.equal(d.querySelector("#types h2")!.textContent, "Types (1)");
+  assert.equal(
+    d.querySelector("#predicates h2")!.textContent,
+    "Predicates (2)",
+  );
   assert.equal(d.querySelectorAll("#predicates details.api-doc").length, 2);
   assert.match(
     d.querySelector("#predicate-valid-index")!.textContent!,
@@ -62,4 +67,15 @@ test("API contracts, type invariants and predicate definitions use collapsible c
     2,
   );
   dom.window.close();
+});
+
+test("public clock-dbm snapshot displays the recorded preconditions without invented contracts", async () => {
+  const { clockDbmDemo } = await import("../src/clock-dbm-demo");
+  const views = createViews({ user: null }, {}, () => "");
+  const d = new JSDOM(views.reportAPIs(clockDbmDemo)).window.document;
+  assert.equal(d.querySelectorAll(".inline-spec").length, 70);
+  assert.equal(d.querySelectorAll(".contract-clause").length, 70);
+  assert.equal(d.querySelectorAll(".api-source a").length, 70);
+  assert.match(d.body.textContent!, /Recorded precondition\s*true/);
+  assert.doesNotMatch(d.body.textContent!, /Ensures/);
 });
