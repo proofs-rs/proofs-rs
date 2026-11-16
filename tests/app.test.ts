@@ -3100,7 +3100,7 @@ test("HTML pages render public content without JavaScript and preserve visibilit
     ["/crate/sample?version=1.0.0", "safe"],
     ["/api/safe", "sample::safe"],
     ["/reports", "SSR <script>report</script>"],
-    ["/report/1", "Formal specification unavailable"],
+    ["/report/1", "Recorded precondition"],
     [`/claim/${claim}?report_revision=1`, "Preconditions"],
     ["/tools", "Kani"],
     ["/tool/kani", "0.68.0"],
@@ -3547,8 +3547,7 @@ test("HTML includes all crate versions, API items, report claims, tool versions 
   );
   const report = await read("/report/1");
   assert.equal(
-    report.window.document.querySelectorAll(".report-api-claims .inline-spec")
-      .length,
+    report.window.document.querySelectorAll(".inline-spec").length,
     37,
   );
   const tool = await read("/tool/kani");

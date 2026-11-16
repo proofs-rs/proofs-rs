@@ -955,3 +955,12 @@ textarea {
   height: 1em;
   object-fit: contain;
 }
+
+.report-apis .api-contract {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.report-apis .api-contract code {
+  font: inherit;
+}

@@ -396,16 +396,59 @@ export function createViews(
             ? claimHref(claim.id, claim.report_revision)
             : apiHref(id);
         },
+        contract: (api) =>
+          (groups.get(api.id) ?? [])
+            .map((claim, index, claims) => {
+              const f = claim.formal_evidence;
+              const label =
+                claims.length > 1 ? `// Contract ${index + 1}\n` : "";
+              if (!f)
+                return `<span class="inline-spec">${label}// ${claim.precondition ? `Recorded precondition: ${esc(claim.precondition)}` : "Specification unavailable"}\n</span>`;
+              if (f.kind === "creusot") {
+                const render = (value: string, segments?: any[]) => {
+                  if (!c.synthetic || !validLeanSegments(value, segments))
+                    return esc(value);
+                  return segments!
+                    .map((part: any) =>
+                      part.ref
+                        ? `<a href="${esc(part.ref)}">${esc(part.text)}</a>`
+                        : esc(part.text),
+                    )
+                    .join("");
+                };
+                return `<span class="inline-spec">${label}${f.requires.map((r: string, i: number) => `#[requires(${render(r, f.requires_segments?.[i])})]\n`).join("")}${f.ensures.map((r: string) => `#[ensures(${esc(r)})]\n`).join("")}</span>`;
+              }
+              const definitions = new Map<string, any>(
+                f.definitions.map((d: any) => [d.name, d]),
+              );
+              const expression = (value: string, parts?: any[]) =>
+                validLeanSegments(value, parts)
+                  ? parts!
+                      .map((p: any) => {
+                        const d = p.ref ? definitions.get(p.ref) : null;
+                        return d?.source_url
+                          ? `<a href="${esc(d.source_url)}">${esc(p.text)}</a>`
+                          : esc(p.text);
+                      })
+                      .join("")
+                  : esc(value);
+              const binders = f.binders
+                .map(
+                  (b: any) =>
+                    `(${esc(b.name)} : ${expression(b.type, b.type_segments)})`,
+                )
+                .join(" ");
+              return `<span class="inline-spec">${label}// Lean: ${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}\n</span>`;
+            })
+            .join(""),
         details: (api) => {
-          const claims = (groups.get(api.id) ?? []).map(
-            (claim) =>
-              `<div class="inline-spec"><p class="meta">Report revision ${esc(claim.report_revision)} · ${esc(c.tool || "")}</p>${claim.formal_evidence ? formalStatement(claim.formal_evidence, true) : `<p class="meta">Formal specification unavailable.</p>${claim.precondition ? `<p>Precondition: <code>${esc(claim.precondition)}</code></p>` : ""}`}</div>`,
-          );
           const findings = (findingGroups.get(api.id) ?? []).map(
             (f) =>
               `<a href="/finding/${enc(f.id)}">Finding: ${esc(f.title)}</a>${f.validity !== "reported" ? ` ${statusBadge(f.validity)}` : ""}`,
           );
-          return `<div class="report-api-claims"><div class="claim-links">${claims.join("")}</div>${findings.length ? `<span class="finding-links">${claims.length ? " · " : ""}${findings.join(", ")}</span>` : ""}</div>`;
+          return findings.length
+            ? `<div class="report-api-claims"><span class="finding-links">${findings.join(", ")}</span></div>`
+            : "";
         },
       },
     )}</section>`;

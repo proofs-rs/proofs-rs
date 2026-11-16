@@ -170,13 +170,10 @@ test("report body removes redundant labels and groups claims by API with revisio
     0,
   );
   assert.match(
-    d.querySelector(".report-api-claims").textContent,
-    /Formal specification unavailable/,
+    d.querySelector(".api-contract").textContent,
+    /Recorded precondition/,
   );
-  assert.match(
-    d.querySelector(".report-api-claims").textContent,
-    /input is valid/,
-  );
+  assert.match(d.querySelector(".api-contract").textContent, /input is valid/);
   assert(
     ![...d.querySelectorAll("h2")].some((n: any) =>
       n.textContent.startsWith("Claims"),
@@ -421,7 +418,7 @@ test("report APIs include finding-only APIs and combine associations without dup
     .closest(".catalog-row")!;
   assert.match(
     shared.textContent!,
-    /Formal specification unavailable.*Finding: Signed <read>/,
+    /Specification unavailable.*Finding: Signed <read>/s,
   );
   assert.equal(shared.querySelector("read"), null);
   dom.window.close();
