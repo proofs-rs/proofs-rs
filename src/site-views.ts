@@ -443,10 +443,40 @@ export function createViews(
                 };
                 return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Requires</div><pre><code>${f.requires.length ? f.requires.map((r: string, i: number) => render(r, f.requires_segments?.[i])).join("\n") : "None recorded"}</code></pre></div><div class="contract-clause"><div class="contract-label">Ensures</div><pre><code>${f.ensures.length ? f.ensures.map((r: string) => esc(r)).join("\n") : "None recorded"}</code></pre></div></div>`;
               }
-              const definitions = f.definitions.filter(
-                (d: any) => d.source_url,
+              const definitions = new Map<string, any>(
+                f.definitions.map((d: any) => [d.name, d]),
               );
-              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${esc(f.statement)}</code></pre></div>${definitions.length ? `<p class="meta">Definitions: ${definitions.map((d: any) => `<a href="${esc(d.source_url)}"><code>${esc(d.name)}</code></a>`).join(", ")}</p>` : ""}</div>`;
+              const expression = (value: string, segments?: any[]) => {
+                if (!validLeanSegments(value, segments)) return esc(value);
+                return segments!
+                  .map((part: any) => {
+                    const definition = part.ref
+                      ? definitions.get(part.ref)
+                      : null;
+                    return definition?.source_url
+                      ? `<a href="${esc(definition.source_url)}">${esc(part.text)}</a>`
+                      : esc(part.text);
+                  })
+                  .join("");
+              };
+              const supported = f.binders.every((b: any) =>
+                ["explicit", "implicit", "instance"].includes(b.binder),
+              );
+              const binders = f.binders
+                .map((b: any) => {
+                  const [open, close] =
+                    b.binder === "implicit"
+                      ? ["{", "}"]
+                      : b.binder === "instance"
+                        ? ["[", "]"]
+                        : ["(", ")"];
+                  return `${open}${esc(b.name)} : ${expression(b.type, b.type_segments)}${close}`;
+                })
+                .join(" ");
+              const proposition = supported
+                ? `${binders ? `∀ ${binders},\n  ` : ""}${expression(f.conclusion, f.conclusion_segments)}`
+                : esc(f.statement);
+              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Proposition</div><pre><code>${proposition}</code></pre></div></div>`;
             })
             .join(""),
         details: (api) => {

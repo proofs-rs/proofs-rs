@@ -107,10 +107,6 @@ if (
   throw Error("Public staging report snapshot mismatch");
 const page = await fetch(`${origin}/report/${report.id}`);
 const html = await page.text();
-if (
-  !page.ok ||
-  !html.includes("Lean proposition") ||
-  !html.includes("FxHasher")
-)
+if (!page.ok || !html.includes("Proposition") || !html.includes("FxHasher"))
   throw Error(`Staging report page failed: ${page.status}`);
 console.log(`Staging public report snapshot: ${origin}/report/${report.id}`);

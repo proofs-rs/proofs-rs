@@ -103,3 +103,61 @@ test("legacy and inconsistent tagged data fall back to escaped text without infe
     false,
   );
 });
+
+test("API proposition uses recorded readable expressions while retaining all binders", () => {
+  const f = {
+    ...formal(),
+    binders: [
+      { name: "α", type: "Type", kind: "variable", binder: "implicit" },
+      {
+        name: "inst",
+        type: "Inhabited α",
+        kind: "instance",
+        binder: "instance",
+      },
+      { name: "x", type: "α", kind: "variable", binder: "explicit" },
+      { name: "h", type: "P x", kind: "hypothesis", binder: "explicit" },
+    ],
+    conclusion: "Q x",
+    conclusion_segments: [{ text: "Q", ref: "Demo.Q" }, { text: " x" }],
+    definitions: [
+      { name: "Demo.Q", source_url: "https://example.test/definition" },
+    ],
+  };
+  const report = {
+    crate: "demo",
+    claims: [
+      {
+        id: "c",
+        api_item_id: "a",
+        display_path: "demo::f",
+        kind: "function",
+        signature: "pub fn f()",
+        report_revision: 1,
+        formal_evidence: f,
+      },
+    ],
+  };
+  const d = new JSDOM(
+    createViews({ user: null }, {}, () => "").reportAPIs(report),
+  ).window.document;
+  assert.equal(d.querySelector(".contract-label")!.textContent, "Proposition");
+  assert.equal(
+    d.querySelector(".contract-clause code")!.textContent,
+    "∀ {α : Type} [inst : Inhabited α] (x : α) (h : P x),\n  Q x",
+  );
+  assert.equal(
+    d.querySelector(
+      '.contract-clause a[href="https://example.test/definition"]',
+    )!.textContent,
+    "Q",
+  );
+  f.binders[0].binder = "unknown";
+  const fallback = new JSDOM(
+    createViews({ user: null }, {}, () => "").reportAPIs(report),
+  ).window.document;
+  assert.equal(
+    fallback.querySelector(".contract-clause code")!.textContent,
+    f.statement,
+  );
+});

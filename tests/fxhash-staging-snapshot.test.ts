@@ -53,12 +53,18 @@ test("public fxhash snapshot seeds idempotently and renders its recorded formal 
   assert.equal(document.querySelectorAll(".inline-spec").length, 24);
   assert.match(
     document.querySelector(".inline-spec")!.textContent!,
-    /Lean proposition/,
+    /Proposition/,
   );
   assert.equal(
     document.querySelectorAll('.api-source a[href*="/runs/"]').length,
     24,
   );
+  const firstCode = document.querySelector(".inline-spec pre code")!;
+  assert.match(firstCode.textContent!, /fxhash_adapted\.FxHasher/);
+  assert.match(firstCode.textContent!, /Result\.ok/);
+  assert.doesNotMatch(firstCode.textContent!, /@Eq\.\{/);
+  assert(firstCode.querySelector('a[href^="https://github.com/"]'));
+
   assert.match(document.body.textContent!, /Staging copy/);
   db.close();
 });
