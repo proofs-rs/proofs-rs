@@ -396,6 +396,14 @@ export function createViews(
             ? claimHref(claim.id, claim.report_revision)
             : apiHref(id);
         },
+        source: (api) => {
+          const source = (groups.get(api.id) ?? []).find(
+            (claim) => claim.formal_evidence?.source_url,
+          )?.formal_evidence.source_url;
+          return source
+            ? `<a class="api-source" href="${esc(source)}">[src]</a>`
+            : "";
+        },
         docs: (api) => {
           const docs = groups.get(api.id)?.[0]?.docs;
           return docs
@@ -410,10 +418,9 @@ export function createViews(
                 claims.length > 1
                   ? `<p class="contract-number">Contract ${index + 1}</p>`
                   : "";
-              const evidence =
-                f?.source_url || f?.check_url
-                  ? `<footer class="contract-evidence">${f.source_url ? `<a href="${esc(f.source_url)}">[src]</a>` : ""}${f.check_url ? `<a href="${esc(f.check_url)}">[proof]</a>` : ""}</footer>`
-                  : "";
+              const evidence = f?.check_url
+                ? `<footer class="contract-evidence"><a href="${esc(f.check_url)}">[proof]</a></footer>`
+                : "";
               if (!f)
                 return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}${evidence}</div>`;
               if (f.kind === "creusot") {

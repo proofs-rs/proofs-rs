@@ -1100,3 +1100,19 @@ textarea {
   justify-content: flex-end;
   gap: 12px;
 }
+
+.api-doc-wrap {
+  position: relative;
+  min-width: 0;
+}
+.report-apis .api-doc-wrap:has(.api-source) .api-doc-heading {
+  padding-right: 72px;
+}
+.api-source {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}

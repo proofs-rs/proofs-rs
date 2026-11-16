@@ -35,6 +35,15 @@ test("API contracts, type invariants and predicate definitions use collapsible c
     d.querySelector("#types .api-doc")!.textContent!,
     /BoundedVec[\s\S]*Invariant[\s\S]*self.items.len\(\) <= self.capacity/,
   );
+  const type = d.querySelector("#types .api-doc-wrap")!;
+  assert.equal(
+    type.querySelector('a[href="#demo-type-source"]')!.className,
+    "api-source",
+  );
+  assert.equal(type.querySelector('a[href="#demo-check"]'), null);
+  const source = api.querySelector('a[href="#demo-source"]')!;
+  assert.equal(source.className, "api-source");
+  assert.equal(source.closest("details"), null);
   assert.equal(d.querySelectorAll("#predicates details.api-doc").length, 2);
   assert.match(
     d.querySelector("#predicate-valid-index")!.textContent!,
