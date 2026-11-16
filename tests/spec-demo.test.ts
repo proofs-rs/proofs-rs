@@ -23,10 +23,13 @@ test("spec demo shows inline examples and evaluates only the sample predicates",
     row.querySelector(".api-doc-heading")!.textContent!,
     /pub fn get<T>\(items: &\[T\], index: usize\) -> Option<&T>/,
   );
-  const code = row.querySelector("pre code")!;
   assert.match(
-    code.textContent!,
-    /#\[requires\(valid_index\(index, items\.len\(\)\)\)\][\s\S]*pub fn get/,
+    row.querySelector(".api-contract")!.textContent!,
+    /Requires[\s\S]*valid_index\(index, items.len\(\)\)[\s\S]*Ensures[\s\S]*result.is_some/,
+  );
+  assert.match(
+    row.querySelector(".contract-evidence")!.textContent!,
+    /Synthetic example/,
   );
   assert.equal(d.querySelector(".lean-role"), null);
   assert.equal(d.querySelector(".formal-statement"), null);

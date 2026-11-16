@@ -1003,3 +1003,62 @@ textarea {
 .report-apis .contract-attribute {
   color: #80512b;
 }
+
+/* Contract cards group each API's signature, clauses, and evidence. */
+.report-apis .api-doc {
+  border: 1px solid var(--line, #d4d4d4);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.report-apis .api-doc-heading {
+  background: var(--surface, #f5f5f5);
+  border-bottom: 1px solid var(--line, #ddd);
+  margin: 0;
+  padding: 14px 16px;
+}
+.api-doc-path {
+  margin-top: 5px;
+  font:
+    400 13px/1.4 system-ui,
+    sans-serif;
+  overflow-wrap: anywhere;
+}
+.report-apis .api-contract {
+  background: transparent;
+  border-radius: 0;
+  padding: 0 16px;
+}
+.contract-number {
+  font-weight: 600;
+}
+.contract-clause {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line, #e5e5e5);
+}
+.contract-label {
+  font:
+    600 11px/1.4 system-ui,
+    sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted, #666);
+  margin-bottom: 6px;
+}
+.report-apis .contract-clause pre {
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.contract-evidence {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 12px 0;
+  color: var(--muted, #666);
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}

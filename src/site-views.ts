@@ -401,9 +401,12 @@ export function createViews(
             .map((claim, index, claims) => {
               const f = claim.formal_evidence;
               const label =
-                claims.length > 1 ? `// Contract ${index + 1}\n` : "";
+                claims.length > 1
+                  ? `<p class="contract-number">Contract ${index + 1}</p>`
+                  : "";
+              const evidence = `<footer class="contract-evidence"><span>Verification evidence</span><span>${c.synthetic ? "Synthetic example" : `${esc(c.tool || "Recorded check")}${f?.check_url ? ` · <a href="${esc(f.check_url)}">Recorded check</a>` : ""}`}</span></footer>`;
               if (!f)
-                return `<span class="inline-spec">${label}// ${claim.precondition ? `Recorded precondition: ${esc(claim.precondition)}` : "Specification unavailable"}\n</span>`;
+                return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}${evidence}</div>`;
               if (f.kind === "creusot") {
                 const render = (value: string, segments?: any[]) => {
                   if (!c.synthetic || !validLeanSegments(value, segments))
@@ -416,7 +419,7 @@ export function createViews(
                     )
                     .join("");
                 };
-                return `<span class="inline-spec">${label}${f.requires.map((r: string, i: number) => `<span class="contract-attribute">#[requires</span>(${render(r, f.requires_segments?.[i])})<span class="contract-attribute">]</span>\n`).join("")}${f.ensures.map((r: string) => `<span class="contract-attribute">#[ensures</span>(${esc(r)})<span class="contract-attribute">]</span>\n`).join("")}</span>`;
+                return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Requires</div><pre><code>${f.requires.length ? f.requires.map((r: string, i: number) => render(r, f.requires_segments?.[i])).join("\n") : "None recorded"}</code></pre></div><div class="contract-clause"><div class="contract-label">Ensures</div><pre><code>${f.ensures.length ? f.ensures.map((r: string) => esc(r)).join("\n") : "None recorded"}</code></pre></div>${evidence}</div>`;
               }
               const definitions = new Map<string, any>(
                 f.definitions.map((d: any) => [d.name, d]),
@@ -438,7 +441,7 @@ export function createViews(
                     `(${esc(b.name)} : ${expression(b.type, b.type_segments)})`,
                 )
                 .join(" ");
-              return `<span class="inline-spec">${label}// Lean: ${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}\n</span>`;
+              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}</code></pre></div>${evidence}</div>`;
             })
             .join(""),
         details: (api) => {
