@@ -163,7 +163,7 @@ test("report body removes redundant labels and groups claims by API with revisio
     /Report limit.*Tool limit/s,
   );
   assert.equal(d.querySelector(".report-apis h2").textContent, "APIs (1)");
-  assert.equal(d.querySelectorAll('a[href="/api/api-1"]').length, 1);
+  assert.equal(d.querySelectorAll('a[href="/api/api-1"]').length, 0);
   assert.equal(d.querySelectorAll(".inline-spec").length, 3);
   assert.equal(
     d.querySelectorAll('.report-api-claims a[href^="/claim/"]').length,
@@ -412,10 +412,8 @@ test("report APIs include finding-only APIs and combine associations without dup
   const d = dom.window.document;
   assert.equal(d.querySelector("h2")?.textContent, "APIs (2)");
   assert.equal(d.querySelectorAll('a[href="/finding/f"]').length, 2);
-  assert.equal(d.querySelectorAll('a[href="/api/only"]').length, 1);
-  const shared = d
-    .querySelector('a[href="/api/shared"]')!
-    .closest(".catalog-row")!;
+  assert.equal(d.querySelectorAll('[data-api-path="demo::checked"]').length, 1);
+  const shared = d.querySelector('[data-api-path="demo::read"]')!;
   assert.match(
     shared.textContent!,
     /Specification unavailable.*Finding: Signed <read>/s,

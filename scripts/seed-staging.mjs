@@ -167,7 +167,7 @@ if (
 const specDemo = await readPage("/spec-demo");
 if (
   !specDemo.includes('data-predicate-demo="valid-index"') ||
-  !specDemo.includes("Synthetic data")
+  !specDemo.includes("api-doc-comment")
 )
   throw Error("Specification demo missing");
 const catalogue = JSON.parse(

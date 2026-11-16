@@ -1062,3 +1062,41 @@ textarea {
     13px/1.4 system-ui,
     sans-serif;
 }
+
+.report-apis .api-doc-heading {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  list-style: none;
+}
+.report-apis .api-doc-heading::-webkit-details-marker {
+  display: none;
+}
+.report-apis .api-doc-heading::before {
+  content: "▸";
+  color: #777;
+  flex: none;
+}
+.report-apis .api-doc[open] > .api-doc-heading::before {
+  content: "▾";
+}
+.report-apis .api-doc-heading code {
+  flex: 1;
+  min-width: 0;
+}
+.report-apis .rust-keyword {
+  color: #8959a8;
+  font-weight: 600;
+}
+.api-doc-comment {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line, #e5e5e5);
+}
+.api-doc-comment p {
+  margin: 0;
+}
+.contract-evidence {
+  justify-content: flex-end;
+  gap: 12px;
+}

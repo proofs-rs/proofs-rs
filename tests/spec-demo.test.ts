@@ -27,13 +27,25 @@ test("spec demo shows inline examples and evaluates only the sample predicates",
     row.querySelector(".api-contract")!.textContent!,
     /Requires[\s\S]*valid_index\(index, items.len\(\)\)[\s\S]*Ensures[\s\S]*result.is_some/,
   );
+  assert.equal(
+    row.querySelector("details.api-doc")!.hasAttribute("open"),
+    true,
+  );
   assert.match(
-    row.querySelector(".contract-evidence")!.textContent!,
-    /Synthetic example/,
+    row.querySelector(".api-doc-comment")!.textContent!,
+    /Returns a reference/,
+  );
+  assert.equal(row.querySelector(".api-doc-path"), null);
+  assert.equal(
+    row.querySelector('a[href="#demo-source"]')!.textContent,
+    "[src]",
+  );
+  assert.equal(
+    row.querySelector('a[href="#demo-check"]')!.textContent,
+    "[proof]",
   );
   assert.equal(d.querySelector(".lean-role"), null);
   assert.equal(d.querySelector(".formal-statement"), null);
-  assert.match(d.body.textContent!, /Synthetic data/);
   dom.window.eval(readFileSync("public/site.js", "utf8"));
   const form = d.querySelector<HTMLFormElement>(
     '[data-predicate-demo="valid-index"]',

@@ -396,6 +396,12 @@ export function createViews(
             ? claimHref(claim.id, claim.report_revision)
             : apiHref(id);
         },
+        docs: (api) => {
+          const docs = groups.get(api.id)?.[0]?.docs;
+          return docs
+            ? `<div class="api-doc-comment markdown-body">${renderMarkdown(docs, 3)}</div>`
+            : "";
+        },
         contract: (api) =>
           (groups.get(api.id) ?? [])
             .map((claim, index, claims) => {
@@ -404,7 +410,10 @@ export function createViews(
                 claims.length > 1
                   ? `<p class="contract-number">Contract ${index + 1}</p>`
                   : "";
-              const evidence = `<footer class="contract-evidence"><span>Verification evidence</span><span>${c.synthetic ? "Synthetic example" : `${esc(c.tool || "Recorded check")}${f?.check_url ? ` · <a href="${esc(f.check_url)}">Recorded check</a>` : ""}`}</span></footer>`;
+              const evidence =
+                f?.source_url || f?.check_url
+                  ? `<footer class="contract-evidence">${f.source_url ? `<a href="${esc(f.source_url)}">[src]</a>` : ""}${f.check_url ? `<a href="${esc(f.check_url)}">[proof]</a>` : ""}</footer>`
+                  : "";
               if (!f)
                 return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}${evidence}</div>`;
               if (f.kind === "creusot") {

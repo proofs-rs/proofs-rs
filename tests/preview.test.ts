@@ -175,18 +175,10 @@ test("preview routes stay local, metadata links use configured origin, and no ac
   assert(d.body.textContent.includes("New report"));
   assert(!d.body.textContent.includes("Report #null"));
   assert(d.querySelector('a[href="/claim/preview-claim-0"]'));
-  assert.equal(
-    d.querySelector(".api-name")!.getAttribute("href"),
-    "/claim/preview-claim-0",
-  );
+  assert.equal(d.querySelector(".api-doc-path"), null);
   assert.equal(
     d.querySelector('a[href="https://staging.example/api/api-f"]'),
     null,
-  );
-  assert.equal(
-    renderPreview(data, d.querySelector(".api-name")!.getAttribute("href")!)
-      .status,
-    200,
   );
   assert(d.querySelector('a[href="https://staging.example/report/42?v=2"]'));
   assert(
