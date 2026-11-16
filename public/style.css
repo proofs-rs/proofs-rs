@@ -1106,9 +1106,11 @@ textarea {
   min-width: 0;
 }
 .report-apis .api-doc-wrap:has(.api-source) .api-doc-heading {
-  padding-right: 72px;
+  padding-right: 140px;
 }
 .api-source {
+  display: flex;
+  gap: 10px;
   position: absolute;
   top: 14px;
   right: 16px;

@@ -397,12 +397,17 @@ export function createViews(
             : apiHref(id);
         },
         source: (api) => {
-          const source = (groups.get(api.id) ?? []).find(
-            (claim) => claim.formal_evidence?.source_url,
-          )?.formal_evidence.source_url;
-          return source
-            ? `<a class="api-source" href="${esc(source)}">[src]</a>`
-            : "";
+          const evidence = (groups.get(api.id) ?? [])
+            .map((claim) => claim.formal_evidence)
+            .filter(Boolean);
+          const source = evidence.find((f) => f.source_url)?.source_url;
+          const proofs = [
+            ...new Set<string>(
+              evidence.map((f) => f.check_url).filter(Boolean),
+            ),
+          ];
+          if (!source && !proofs.length) return "";
+          return `<span class="api-source">${source ? `<a href="${esc(source)}">[src]</a>` : ""}${proofs.map((url, index) => `<a href="${esc(url)}">[proof${proofs.length > 1 ? ` ${index + 1}` : ""}]</a>`).join("")}</span>`;
         },
         docs: (api) => {
           const docs = groups.get(api.id)?.[0]?.docs;
@@ -418,11 +423,9 @@ export function createViews(
                 claims.length > 1
                   ? `<p class="contract-number">Contract ${index + 1}</p>`
                   : "";
-              const evidence = f?.check_url
-                ? `<footer class="contract-evidence"><a href="${esc(f.check_url)}">[proof]</a></footer>`
-                : "";
+
               if (!f)
-                return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}${evidence}</div>`;
+                return `<div class="inline-spec">${label}${claim.precondition ? `<div class="contract-clause"><div class="contract-label">Recorded precondition</div><pre><code>${esc(claim.precondition)}</code></pre></div>` : '<p class="meta">Specification unavailable.</p>'}</div>`;
               if (f.kind === "creusot") {
                 const render = (value: string, segments?: any[]) => {
                   if (!c.synthetic || !validLeanSegments(value, segments))
@@ -435,7 +438,7 @@ export function createViews(
                     )
                     .join("");
                 };
-                return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Requires</div><pre><code>${f.requires.length ? f.requires.map((r: string, i: number) => render(r, f.requires_segments?.[i])).join("\n") : "None recorded"}</code></pre></div><div class="contract-clause"><div class="contract-label">Ensures</div><pre><code>${f.ensures.length ? f.ensures.map((r: string) => esc(r)).join("\n") : "None recorded"}</code></pre></div>${evidence}</div>`;
+                return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Requires</div><pre><code>${f.requires.length ? f.requires.map((r: string, i: number) => render(r, f.requires_segments?.[i])).join("\n") : "None recorded"}</code></pre></div><div class="contract-clause"><div class="contract-label">Ensures</div><pre><code>${f.ensures.length ? f.ensures.map((r: string) => esc(r)).join("\n") : "None recorded"}</code></pre></div></div>`;
               }
               const definitions = new Map<string, any>(
                 f.definitions.map((d: any) => [d.name, d]),
@@ -457,7 +460,7 @@ export function createViews(
                     `(${esc(b.name)} : ${expression(b.type, b.type_segments)})`,
                 )
                 .join(" ");
-              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}</code></pre></div>${evidence}</div>`;
+              return `<div class="inline-spec">${label}<div class="contract-clause"><div class="contract-label">Lean proposition</div><pre><code>${binders ? `∀ ${binders}, ` : ""}${expression(f.conclusion, f.conclusion_segments)}</code></pre></div></div>`;
             })
             .join(""),
         details: (api) => {

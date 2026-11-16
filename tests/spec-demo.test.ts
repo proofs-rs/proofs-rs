@@ -42,7 +42,11 @@ test("API contracts, type invariants and predicate definitions use collapsible c
   );
   assert.equal(type.querySelector('a[href="#demo-check"]'), null);
   const source = api.querySelector('a[href="#demo-source"]')!;
-  assert.equal(source.className, "api-source");
+  assert.equal(source.parentElement!.className, "api-source");
+  assert.equal(
+    source.parentElement,
+    api.querySelector('a[href="#demo-check"]')!.parentElement,
+  );
   assert.equal(source.closest("details"), null);
   assert.equal(d.querySelectorAll("#predicates details.api-doc").length, 2);
   assert.match(
