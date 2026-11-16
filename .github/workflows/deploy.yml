@@ -82,6 +82,10 @@ jobs:
         run: node scripts/seed-staging.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Copy public fxhash report snapshot to staging
+        run: node scripts/seed-staging-fxhash.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       - name: Deployment summary
         run: |
           echo 'Staging deployed to ${{ steps.resources.outputs.url }}' >> "$GITHUB_STEP_SUMMARY"

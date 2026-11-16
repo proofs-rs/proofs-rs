@@ -1,4 +1,9 @@
-import { claimFormalEvidence } from "./runs";
+import { readRecord } from "./runs";
+import {
+  checkAnchor,
+  formalSourceLinks,
+  resolveContract,
+} from "../web/formal-evidence";
 import { clockDbmDemo } from "./clock-dbm-demo";
 import { uiDemo } from "./ui-demo";
 import { reportShare } from "../web/report-share";
@@ -646,15 +651,23 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         // Parse one potentially large SARIF record at a time to bound Worker memory.
         for (const [index, run] of (item.run_ids as string[]).entries()) {
           try {
-            recorded.push(
-              renderRecordedRun(
-                await get(`/runs/${enc(run)}/sarif`),
-                run,
-                index,
-                item,
-                true,
-              ),
-            );
+            const sarif = await get(`/runs/${enc(run)}/sarif`);
+            const record = readRecord(sarif);
+            for (const claim of item.claims) {
+              if (claim.evidence_ref?.run_id !== run) continue;
+              const contract = resolveContract(sarif, run, claim);
+              if (!contract?.formal)
+                throw new Fault(400, "invalid_evidence_ref");
+              claim.formal_evidence = {
+                ...formalSourceLinks(
+                  contract.formal,
+                  record.source.repository,
+                  record.source.commit,
+                ),
+                check_url: `/runs/${enc(run)}?report=${item.id}&v=${item.revision_no}#${checkAnchor(contract.harness)}`,
+              };
+            }
+            recorded.push(renderRecordedRun(sarif, run, index, item, true));
           } catch {
             recorded.push(
               `<p role="alert">Unable to load recorded run. <a href="/runs/${enc(run)}?report=${item.id}&amp;v=${item.revision_no}">View run</a></p>`,
@@ -680,11 +693,6 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
         ? await get(`/crates/${enc(item.crate)}/${enc(item.version)}/apis`)
         : null;
       const findingSection = `<section id="findings" class="report-section"><h2>Findings (${item.finding_count})</h2>${item.revision_no !== item.latest_revision_no ? "<p>Findings show current information, including later additions. Each entry identifies its origin revision and latest update; it is separate from this revision’s proof content.</p>" : ""}${item.findings.map((f: any) => findingItem(f, false, [], true, editableFindings)).join("") || "<p>No findings reported.</p>"}${editableFindings ? `<details><summary>Add finding</summary>${findingForm(item.id, undefined, findingAPIs.items)}</details>` : ""}</section>`;
-      // Formal evidence belongs to this exact report revision.
-      for (const claim of item.claims) {
-        if (claim.evidence_ref)
-          claim.formal_evidence = await claimFormalEvidence(c, claim);
-      }
       const content = reportBody(
         item,
         recorded.join(""),
