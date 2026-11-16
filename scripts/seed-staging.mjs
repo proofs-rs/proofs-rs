@@ -166,7 +166,7 @@ if (
   throw Error("Report inline specifications missing");
 const specDemo = await readPage("/spec-demo");
 if (
-  !specDemo.includes('data-predicate-demo="valid-index"') ||
+  !specDemo.includes('id="predicate-valid-index"') ||
   !specDemo.includes("api-doc-comment")
 )
   throw Error("Specification demo missing");

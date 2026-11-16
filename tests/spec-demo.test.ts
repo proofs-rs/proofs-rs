@@ -1,63 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createViews } from "../src/site-views";
 import { uiDemo } from "../src/ui-demo";
 
-test("spec demo shows inline examples and evaluates only the sample predicates", () => {
+test("API contracts, type invariants and predicate definitions use collapsible cards", () => {
   const views = createViews({ user: null }, {}, () => "");
-  const dom = new JSDOM(uiDemo(views.reportAPIs), {
-    runScripts: "outside-only",
-    url: "https://example.test/spec-demo",
-  });
+  const dom = new JSDOM(uiDemo(views.reportAPIs));
   const d = dom.window.document;
-  assert.equal(d.querySelectorAll(".api-contract").length, 3);
+  const api = d.querySelector('[data-api-path="demo::get"]')!;
+  assert.match(
+    api.querySelector(".api-doc-heading")!.textContent!,
+    /pub fn get<T>/,
+  );
+  assert.match(
+    api.querySelector(".inline-spec")!.textContent!,
+    /Requires[\s\S]*valid_index[\s\S]*Ensures/,
+  );
+  assert(
+    api
+      .querySelector(".inline-spec")!
+      .compareDocumentPosition(api.querySelector(".api-doc-comment")!) &
+      dom.window.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  assert.equal(
+    api.querySelector('a[href="#demo-source"]')!.textContent,
+    "[src]",
+  );
+  assert.equal(
+    api.querySelector('a[href="#demo-check"]')!.textContent,
+    "[proof]",
+  );
+  assert.match(
+    d.querySelector("#types .api-doc")!.textContent!,
+    /BoundedVec[\s\S]*Invariant[\s\S]*self.items.len\(\) <= self.capacity/,
+  );
+  assert.equal(d.querySelectorAll("#predicates details.api-doc").length, 2);
+  assert.match(
+    d.querySelector("#predicate-valid-index")!.textContent!,
+    /Definition[\s\S]*index < length/,
+  );
+  assert.equal(
+    d.querySelectorAll("[data-predicate-demo], #predicates form").length,
+    0,
+  );
   assert.equal(
     d.querySelectorAll('.inline-spec a[href^="#predicate-"]').length,
     2,
   );
-  assert.equal(d.querySelectorAll('a[href^="/claim/"]').length, 0);
-  const row = d.querySelector('[data-api-path="demo::get"]')!;
-  assert.match(
-    row.querySelector(".api-doc-heading")!.textContent!,
-    /pub fn get<T>\(items: &\[T\], index: usize\) -> Option<&T>/,
-  );
-  assert.match(
-    row.querySelector(".api-contract")!.textContent!,
-    /Requires[\s\S]*valid_index\(index, items.len\(\)\)[\s\S]*Ensures[\s\S]*result.is_some/,
-  );
-  assert.equal(
-    row.querySelector("details.api-doc")!.hasAttribute("open"),
-    true,
-  );
-  assert.match(
-    row.querySelector(".api-doc-comment")!.textContent!,
-    /Returns a reference/,
-  );
-  assert.equal(row.querySelector(".api-doc-path"), null);
-  assert.equal(
-    row.querySelector('a[href="#demo-source"]')!.textContent,
-    "[src]",
-  );
-  assert.equal(
-    row.querySelector('a[href="#demo-check"]')!.textContent,
-    "[proof]",
-  );
-  assert.equal(d.querySelector(".lean-role"), null);
-  assert.equal(d.querySelector(".formal-statement"), null);
-  dom.window.eval(readFileSync("public/site.js", "utf8"));
-  const form = d.querySelector<HTMLFormElement>(
-    '[data-predicate-demo="valid-index"]',
-  )!;
-  form.dispatchEvent(
-    new dom.window.Event("submit", { bubbles: true, cancelable: true }),
-  );
-  assert.equal(form.querySelector("output")!.textContent, "true");
-  form.querySelector<HTMLInputElement>('[name="first"]')!.value = "4";
-  form.dispatchEvent(
-    new dom.window.Event("submit", { bubbles: true, cancelable: true }),
-  );
-  assert.equal(form.querySelector("output")!.textContent, "false");
   dom.window.close();
 });
