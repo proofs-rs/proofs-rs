@@ -12,7 +12,6 @@
       <guid isPermaLink="false">https://proofs-rs.hashnode.dev/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust</guid>
       <dc:creator>Yuichi Nishiwaki</dc:creator>
       <pubDate>Tue, 24 Nov 2026 14:12:30 &#43;0000</pubDate>
-      <description>lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request…</description>
       <content:encoded>&lt;p&gt;lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request from Anneal’s creator, Josh Liebow-Feeser, has already been merged into lean-miri.&lt;/p&gt;
 &lt;p&gt;&lt;a href=&#34;https://proofs-rs.github.io/lean-miri/&#34;&gt;lean-miri&lt;/a&gt; ports Rust’s Miri interpreter to Lean. Rather than running lean-miri directly as an end-to-end verifier, Anneal uses its MIR execution model as a reference semantics. Proofs in Anneal show that individual operations in Anneal’s own model correspond to the matching operations in lean-miri.&lt;/p&gt;
 &lt;p&gt;The core challenge for a framework like Anneal is ensuring that its abstract proof model remains sound with respect to Rust’s actual execution semantics—including edge cases around uninitialized memory, provenance, and byte-level layouts. Building and maintaining a formal Rust semantics from scratch to anchor that model would be prohibitively expensive. Using lean-miri as a ground-truth specification solves this by grounding Anneal’s tractable proof model directly in Miri’s concrete behavior.&lt;/p&gt;
@@ -26,7 +25,6 @@
       <guid isPermaLink="false">https://proofs-rs.hashnode.dev/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean</guid>
       <dc:creator>Yuichi Nishiwaki</dc:creator>
       <pubDate>Tue, 03 Nov 2026 14:24:37 &#43;0000</pubDate>
-      <description>Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust…</description>
       <content:encoded>&lt;p&gt;Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust language features, including advanced traits and raw pointer operations, and implements state-of-the-art memory models. This broad coverage makes Miri a practical and widely used tool for detecting UB in real-world Rust code.&lt;/p&gt;
 &lt;p&gt;While dynamic execution tools like Miri are invaluable for catching bugs during testing, proving that a program is free of Undefined Behavior (UB-freedom) across all valid inputs or thread schedules generally requires formal verification. Tools like Aeneas and Creusot provide such great verification pipelines for Rust, but fully formalizing low-level execution semantics still remains a big challenge.&lt;/p&gt;
 &lt;p&gt;To explore whether we can leverage Miri&#39;s existing, highly comprehensive execution model for mathematical proofs, we built &lt;a href=&#34;https://github.com/proofs-rs/lean-miri&#34;&gt;lean-miri&lt;/a&gt;, an experimental port of the Miri interpreter into the Lean 4 theorem prover.&lt;/p&gt;
@@ -90,7 +88,6 @@
       <guid isPermaLink="false">https://proofs-rs.hashnode.dev/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results</guid>
       <dc:creator>Yuichi Nishiwaki</dc:creator>
       <pubDate>Sat, 10 Oct 2026 22:23:16 &#43;0000</pubDate>
-      <description>Hi, folks! We’re very happy to introduce proofs.rs, a place to publish and explore formal verification results for Rust crates. There are some great tools…</description>
       <content:encoded>&lt;p&gt;Hi, folks!&lt;/p&gt;
 &lt;p&gt;We’re very happy to introduce &lt;a href=&#34;https://proofs.rs&#34;&gt;proofs.rs&lt;/a&gt;, a place to publish and explore formal verification results for Rust crates.&lt;/p&gt;
 &lt;h2 id=&#34;why&#34;&gt;Why?&lt;/h2&gt;
