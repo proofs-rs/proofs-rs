@@ -1,3 +1,4 @@
+import { blogPath, blogPosts } from "./blog";
 import type { Env } from "./core";
 import { defaultRelease } from "./releases";
 
@@ -12,6 +13,8 @@ const staticPaths = [
   "/privacy",
   "/contact",
   "/api/docs",
+  "/blog",
+  ...blogPosts.map((post) => blogPath(post.slug)),
   "/book/",
   "/book/introduction.html",
   "/book/concepts.html",

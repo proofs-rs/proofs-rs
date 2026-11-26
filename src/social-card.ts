@@ -1,3 +1,4 @@
+import { blogPath, blogPosts } from "./blog";
 import MarkdownIt from "markdown-it";
 export type SocialCard = {
   title: string;
@@ -65,6 +66,20 @@ export async function resolveSocialCard(
   get: SocialGet,
 ): Promise<SocialCard | null> {
   const path = input.pathname;
+  const post = blogPosts.find((item) => blogPath(item.slug) === path);
+  if (post || path === "/blog") {
+    return {
+      title: post?.title ?? "proofs.rs blog",
+      description:
+        post?.description ??
+        "Updates on Rust formal verification and the tools we build.",
+      label: "proofs.rs blog",
+      context: post?.author ?? "",
+      footer: post?.published.slice(0, 10) ?? "Rust · Formal verification",
+      path,
+      type: post ? "article" : "website",
+    };
+  }
   if (pages[path]) {
     const [title, description] = pages[path];
     return {

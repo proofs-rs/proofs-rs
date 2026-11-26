@@ -1,3 +1,10 @@
+import {
+  blogAliases,
+  blogArticle,
+  blogIndex,
+  blogPath,
+  blogPosts,
+} from "./blog";
 import { reportShare } from "../web/report-share";
 import { resolveSocialCard, cardMetadata } from "./social-card";
 import { reportFindings } from "./findings";
@@ -94,6 +101,7 @@ const pageNames = new Set([
   "about",
   "publish",
   "runs",
+  "blog",
 ]);
 export function isSitePage(path: string) {
   const parts = path.split("/").filter(Boolean);
@@ -225,6 +233,27 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
     if (p.startsWith("my-"))
       return c.redirect("/account?section=" + enc(p.slice(3)), 302);
     me = await get("/me");
+    if (p === "blog") {
+      const alias = id ? blogAliases.get(id) : undefined;
+      if (parts.length === 2 && alias) return c.redirect(blogPath(alias), 308);
+      if (parts.length === 1) {
+        if (current.pathname !== "/blog") return c.redirect("/blog", 308);
+        canonicalPath = "/blog";
+        return result("Blog", blogIndex());
+      }
+      const post =
+        parts.length === 2 && blogPosts.find((item) => item.slug === id);
+      if (!post)
+        return result(
+          "Post not found",
+          '<h1>Post not found</h1><p><a href="/blog">Browse the blog</a></p>',
+          404,
+        );
+      canonicalPath = blogPath(post.slug);
+      if (current.pathname !== canonicalPath)
+        return c.redirect(canonicalPath, 308);
+      return result(post.title, blogArticle(post));
+    }
     const config = {
       show_star_karma: c.env.SHOW_STAR_KARMA === "true",
       show_home_discussion: c.env.SHOW_HOME_DISCUSSION === "true",

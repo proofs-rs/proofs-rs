@@ -1,3 +1,4 @@
+import { blogRSS } from "./blog";
 import { resolveSocialCard } from "./social-card";
 import { socialImage, renderSocialImage } from "./social-image";
 import { seoResponse } from "./seo";
@@ -120,6 +121,7 @@ app.get(
 app.get("/api/docs/", (c) => c.redirect("/api/docs", 308));
 for (const path of ["/docs/api", "/docs/api/", "/docs/api/index.html"])
   app.get(path, (c) => c.redirect("/api/docs", 308));
+app.get("/blog/rss.xml", (c) => blogRSS(c.env.APP_ORIGIN));
 app.get("/index.html", (c) => c.redirect("/", 308));
 // HTML routes are separate from the documented JSON API. Internal calls keep all
 // API authentication, validation, origin, CSRF and visibility checks in one place.
