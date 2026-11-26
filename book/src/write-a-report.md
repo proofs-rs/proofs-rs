@@ -78,13 +78,13 @@ when it later revises the Report.
 ## Using an AI agent
 
 If you use an AI agent to draft the report, give it the
-[write-proofs-report skill](https://github.com/proofs-rs/proofs-rs/tree/main/skills/write-proofs-report).
+[write-proofs-report skill](https://proofs.rs/skills/write-proofs-report/SKILL.md).
 It guides the agent to read the evidence and explain guarantees in terms of API
 behavior. Paste this into the agent working on your verified crate:
 
 ```text
 Read and follow this report-writing skill:
-https://raw.githubusercontent.com/proofs-rs/proofs-rs/main/skills/write-proofs-report/SKILL.md
+https://proofs.rs/skills/write-proofs-report/SKILL.md
 
 Draft the editorial [report] fields in proofs.toml for this crate, using its
 source, verification contracts or harnesses, and recorded results. Write for
@@ -102,10 +102,9 @@ results, target and feature configuration, and any differences from the publishe
 crate. Point to their files or URLs; the agent should not need to guess where they
 are. If it cannot fetch the skill URL, provide the contents of `SKILL.md` directly.
 
-For repeated use, install the `skills/write-proofs-report` folder from the
-repository using your agent's skill installation mechanism. The core instructions
-are self-contained in `SKILL.md`; `agents/openai.yaml` supplies optional UI metadata.
-To keep a fixed version, use a Git commit permalink instead of `main`.
+For repeated use, save the public Markdown as `write-proofs-report/SKILL.md`
+and install it with your agent's skill installation mechanism. Keep the
+downloaded file if you need a fixed version of the instructions.
 
 Review the draft yourself before publishing: you are responsible for every
 statement in the Report.

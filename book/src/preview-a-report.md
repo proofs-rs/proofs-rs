@@ -143,4 +143,4 @@ Preview does not resolve these publication conditions for you.
 
 The UI matches the CLI release you installed. To pick up a newly built or installed
 UI bundle, stop and restart preview; browser reload refreshes report data only.
-For source-checkout instructions, see the [CLI documentation](https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md#local-report-preview).
+For source-checkout instructions, see the [CLI documentation](https://github.com/proofs-rs/cargo-proofs/blob/main/README.md#local-report-preview).

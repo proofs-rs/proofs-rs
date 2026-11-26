@@ -16,7 +16,7 @@ import tempfile
 spec = importlib.util.spec_from_file_location('changes', 'scripts/lean-audit-changes.py')
 changes = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(changes)
-for path in ['cli/src/aeneas_probe.lean', 'cli/tests/fixtures/x', 'cli/Cargo.lock',
+for path in ['cli', '.gitmodules', 'cli/src/aeneas_probe.lean', 'cli/tests/fixtures/x', 'cli/Cargo.lock',
              'cli/Cargo.toml', 'cli/.cargo/config.toml', 'src/runs.ts', 'migrations/1.sql',
              'tests/app.test.ts', 'fixtures/x', 'package.json', 'package-lock.json',
              'tsconfig.web.json', 'scripts/prepare-lean-audit.py',

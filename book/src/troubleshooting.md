@@ -49,7 +49,7 @@ Creusot with `target = "annotated"`, check that public functions carry
 ### `… version … is not registered/selectable on this server; request it before publishing`
 
 The tool version in `proofs.toml` is not registered.
-[Request it](https://github.com/proofs-rs/proofs-rs/issues/new?template=tool.yml),
+[Request it](https://proofs-rs.zulipchat.com/),
 or use a registered version listed on [Tools](/tools).
 
 ### `crate_version_not_found`

@@ -1,7 +1,0 @@
-[report]
-title = "Formal extraction fixture"
-[tool]
-name = "aeneas"
-version = "be86ab0f1989d04944292b345b24c435be3ad10a"
-proof_modules = ["Proofs"]
-translation_manifest = "translation.json"

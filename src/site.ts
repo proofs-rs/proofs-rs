@@ -821,7 +821,7 @@ export async function sitePage(c: Ctx, fetch: SiteFetch): Promise<Response> {
       const tools = await get("/tools");
       return result(
         "Verification tools",
-        `<h1>Verification tools</h1>${tools.items.map((t: any) => `<article><h2><a href="/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p>${toolGuide(t.id)}</article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/proofs-rs/proofs-rs/issues/new?template=tool.yml">Request a tool or version</a></p>`,
+        `<h1>Verification tools</h1>${tools.items.map((t: any) => `<article><h2><a href="/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p>${toolGuide(t.id)}</article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://proofs-rs.zulipchat.com/">Request a tool or version</a></p>`,
       );
     }
     if (p === "tool" && id) {

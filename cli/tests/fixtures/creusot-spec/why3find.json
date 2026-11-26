@@ -1,8 +1,0 @@
-{
-  "packages": ["creusot"],
-  "provers": ["alt-ergo"],
-  "tactics": ["compute_specified", "split_vc"],
-  "time": 2,
-  "depth": 6,
-  "warnoff": ["unused_variable", "axiom_abstract"]
-}
