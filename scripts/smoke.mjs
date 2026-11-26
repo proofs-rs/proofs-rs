@@ -20,25 +20,29 @@ for (const path of [
   "/api/v1/config",
 ]) {
   let r;
+  let homepageReady = false;
   for (let attempt = 0; attempt < 6; attempt++) {
     r = await fetch(origin + path);
-    if (r.ok || ![404, 502, 503, 504].includes(r.status)) break;
+    if (r.ok) {
+      if (path !== "/") break;
+      // A newly deployed Worker may still serve the previous homepage for a
+      // few seconds. Require the new link before moving on to its assets.
+      const html = await r.text();
+      homepageReady =
+        html.includes('href="/blog/"') &&
+        !html.includes("proofs-rs.hashnode.dev");
+      if (homepageReady) break;
+    } else if (![404, 502, 503, 504].includes(r.status)) break;
     if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 3000));
   }
   if (!r.ok) throw Error(path + " returned " + r.status);
+  if (path === "/" && !homepageReady)
+    throw Error("Home navigation must link to the local blog");
   if (
     environment === "staging" &&
     !r.headers.get("x-robots-tag")?.includes("noindex")
   )
     throw Error("Missing staging noindex header");
-  if (path === "/") {
-    const html = await r.text();
-    if (
-      !html.includes('href="/blog/"') ||
-      html.includes("proofs-rs.hashnode.dev")
-    )
-      throw Error("Home navigation must link to the local blog");
-  }
   if (path === "/blog/") {
     const html = await r.text();
     const rss = html
