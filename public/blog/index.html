@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>proofs.rs blog</title>
+
+<meta name="description" content="Updates on Rust formal verification and the tools we build.">
+<meta name="author" content="Yuichi Nishiwaki">
+<link rel="canonical" href="https://proofs.rs/blog/">
+<link crossorigin="anonymous" href="/blog/assets/css/stylesheet.fc220c15db4aef0318bbf30adc45d33d4d7c88deff3238b23eb255afdc472ca6.css" integrity="sha256-/CIMFdtK7wMYu/MK3EXTPU18iN7/MjiyPrJVr9xHLKY=" rel="preload stylesheet" as="style"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" href="https://proofs.rs/blog/rss.xml">
+<link rel="alternate" hreflang="en" href="https://proofs.rs/blog/">
+<meta property="og:title" content="proofs.rs blog">
+<meta property="og:description" content="Updates on Rust formal verification and the tools we build.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://proofs.rs/blog/">
+<meta property="og:site_name" content="proofs.rs blog">
+
+</head>
+
+<body class="list" id="top"><header class="header">
+  <nav class="nav" aria-label="Main navigation">
+    <div class="logo"><a href="/blog/">proofs.rs blog</a></div>
+    <ul id="menu">
+      <li><a href="/">proofs.rs</a></li>
+      <li><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></li>
+    </ul>
+  </nav>
+</header>
+<main class="main"> 
+<article class="first-entry home-info">
+    <header class="entry-header">
+        <h1>proofs.rs blog</h1>
+    </header>
+    <div class="entry-content">
+        Updates on Rust formal verification and the tools we build.
+    </div>
+    <footer class="entry-footer">
+        <div class="social-icons" >
+</div>
+
+    </footer>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">How Google&#39;s zerocopy Project Uses lean-miri to Verify Unsafe Rust
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request from Anneal’s creator, Josh Liebow-Feeser, has already been merged into lean-miri.
+lean-miri ports Rust’s Miri interpreter to Lean. Rather than running lean-miri directly as an end-to-end verifier, Anneal uses its MIR execution model as a reference semantics. Proofs in Anneal show that individual operations in Anneal’s own model correspond to the matching operations in lean-miri.
+...</p>
+  </div>
+  <footer class="entry-footer"><time datetime="2026-11-24T14:12:30Z">November 24, 2026</time> · Yuichi Nishiwaki</footer>
+  <a class="entry-link" aria-label="post link to How Google&#39;s zerocopy Project Uses lean-miri to Verify Unsafe Rust" href="/blog/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">lean-miri: Formally Proving Rust Programs Free of Undefined Behavior with Lean
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust language features, including advanced traits and raw pointer operations, and implements state-of-the-art memory models. This broad coverage makes Miri a practical and widely used tool for detecting UB in real-world Rust code.
+While dynamic execution tools like Miri are invaluable for catching bugs during testing, proving that a program is free of Undefined Behavior (UB-freedom) across all valid inputs or thread schedules generally requires formal verification. Tools like Aeneas and Creusot provide such great verification pipelines for Rust, but fully formalizing low-level execution semantics still remains a big challenge.
+...</p>
+  </div>
+  <footer class="entry-footer"><time datetime="2026-11-03T14:24:37Z">November 3, 2026</time> · Yuichi Nishiwaki</footer>
+  <a class="entry-link" aria-label="post link to lean-miri: Formally Proving Rust Programs Free of Undefined Behavior with Lean" href="/blog/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">Announcing Proofs.rs: A Public Registry for Rust Formal Verification Results
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>Hi, folks!
+We’re very happy to introduce proofs.rs, a place to publish and explore formal verification results for Rust crates.
+Why? There are some great tools for formally verifying Rust code, such as Kani, Verus, and Creusot, but their verification results often stay buried in individual repositories, making them hard to discover when we’re trying to decide whether to trust a library.
+We wanted to make those results easier to find, examine, and reuse as building blocks for establishing the correctness of larger systems.
+...</p>
+  </div>
+  <footer class="entry-footer"><time datetime="2026-10-10T22:23:16Z">October 10, 2026</time> · Yuichi Nishiwaki</footer>
+  <a class="entry-link" aria-label="post link to Announcing Proofs.rs: A Public Registry for Rust Formal Verification Results" href="/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/"></a>
+</article>
+    </main>
+    <footer class="footer">
+  <span><a href="/">proofs.rs</a></span> ·
+  <span><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></span> ·
+  <span><a href="https://github.com/proofs-rs/blog">Source</a></span> ·
+  <span>Built with <a href="https://gohugo.io/">Hugo</a> and <a href="https://github.com/adityatelange/hugo-PaperMod">PaperMod</a></span>
+</footer>
+</body>
+
+</html>

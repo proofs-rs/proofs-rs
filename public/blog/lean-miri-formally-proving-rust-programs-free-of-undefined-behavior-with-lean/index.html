@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>lean-miri: Formally Proving Rust Programs Free of Undefined Behavior with Lean | proofs.rs blog</title>
+<meta name="keywords" content="">
+<meta name="description" content="Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust…">
+<meta name="author" content="Yuichi Nishiwaki">
+<link rel="canonical" href="https://proofs.rs/blog/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean/">
+<link crossorigin="anonymous" href="/blog/assets/css/stylesheet.fc220c15db4aef0318bbf30adc45d33d4d7c88deff3238b23eb255afdc472ca6.css" integrity="sha256-/CIMFdtK7wMYu/MK3EXTPU18iN7/MjiyPrJVr9xHLKY=" rel="preload stylesheet" as="style"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" hreflang="en" href="https://proofs.rs/blog/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean/">
+<meta property="og:title" content="lean-miri: Formally Proving Rust Programs Free of Undefined Behavior with Lean">
+<meta property="og:description" content="Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://proofs.rs/blog/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean/">
+<meta property="og:site_name" content="proofs.rs blog">
+
+</head>
+
+<body class="" id="top"><header class="header">
+  <nav class="nav" aria-label="Main navigation">
+    <div class="logo"><a href="/blog/">proofs.rs blog</a></div>
+    <ul id="menu">
+      <li><a href="/">proofs.rs</a></li>
+      <li><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></li>
+    </ul>
+  </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      lean-miri: Formally Proving Rust Programs Free of Undefined Behavior with Lean
+    </h1>
+    <div class="post-description">
+      Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust…
+    </div>
+    <div class="post-meta"><time datetime="2026-11-03T14:24:37Z">November 3, 2026</time> · Yuichi Nishiwaki
+
+</div>
+  </header> 
+  <div class="post-content"><p>Miri is an interpreter for Rust’s Mid-level Intermediate Representation (MIR) that detects undefined behavior (UB). It supports a wide range of Rust language features, including advanced traits and raw pointer operations, and implements state-of-the-art memory models. This broad coverage makes Miri a practical and widely used tool for detecting UB in real-world Rust code.</p>
+<p>While dynamic execution tools like Miri are invaluable for catching bugs during testing, proving that a program is free of Undefined Behavior (UB-freedom) across all valid inputs or thread schedules generally requires formal verification. Tools like Aeneas and Creusot provide such great verification pipelines for Rust, but fully formalizing low-level execution semantics still remains a big challenge.</p>
+<p>To explore whether we can leverage Miri's existing, highly comprehensive execution model for mathematical proofs, we built <a href="https://github.com/proofs-rs/lean-miri">lean-miri</a>, an experimental port of the Miri interpreter into the Lean 4 theorem prover.</p>
+<p>By running Miri’s exact operational semantics inside Lean 4, we can write and check formal proofs of UB-freedom for Rust programs directly against Miri’s unsafe semantics.</p>
+<h2 id="why-port-miri-to-lean">Why Port Miri to Lean?</h2>
+<p>Building a standalone formal semantics, as done in many existing verification tools, often involves trading off language coverage, making it difficult to handle complex traits or advanced language constructs.</p>
+<p>Miri already provides the most complete operational model of Rust in practice. By porting Miri to Lean 4 instead of defining another semantics from scratch, we get a verifier based directly on Rust’s reference execution model.</p>
+<p>The core objective is straightforward: given a Rust program <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi></mrow><annotation encoding="application/x-tex">P</annotation></semantics></math></span> and the interpreted Miri state <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="script">M</mi></mrow><annotation encoding="application/x-tex">\mathcal{M}</annotation></semantics></math></span> in Lean 4, prove the following property as a theorem:</p>
+<span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">∀</mi><mi>i</mi><mo>:</mo><mtext>input</mtext><mo separator="true">,</mo><mspace width="1em"/><mtext>valid</mtext><mo stretchy="false">(</mo><mi>i</mi><mo stretchy="false">)</mo><mtext>  </mtext><mo>⟹</mo><mtext>  </mtext><mi mathvariant="script">M</mi><mo stretchy="false">(</mo><mi>P</mi><mo separator="true">,</mo><mi>i</mi><mo stretchy="false">)</mo><mo mathvariant="normal">≠</mo><mtext>UB</mtext></mrow><annotation encoding="application/x-tex">\forall i : \text{input}, \quad \text{valid}(i) \implies \mathcal{M}(P, i) \neq \text{UB}</annotation></semantics></math></span><h2 id="proving-undefined-behavior-freedom">Proving Undefined Behavior-Freedom</h2>
+<p>So far, we have been working on proving UB-freedom for some concrete programs:</p>
+<h3 id="1-a-trivial-safe-function">1. A trivial safe function</h3>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">fn</span> <span class="nf">empty_function</span><span class="p">()</span><span class="w"> </span><span class="p">{}</span><span class="w">
+</span></span></span></code></pre></div><p>Even for an empty function, verifying state transitions through the full Miri evaluation loop is non-trivial and served as an essential baseline for the core architecture.</p>
+<h3 id="2-a-realistic-function-with-unsafe-duplicate_prefix">2. A realistic function with <code>unsafe</code> (<code>duplicate_prefix</code>)</h3>
+<p>A function that duplicates the first <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span> bytes of a buffer into the following <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span> bytes:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="sd">/// Duplicate the first `n` bytes into the following `n` bytes.
+</span></span></span><span class="line"><span class="cl"><span class="sd"></span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">duplicate_prefix</span><span class="p">(</span><span class="n">buf</span>: <span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="p">[</span><span class="kt">u8</span><span class="p">],</span><span class="w"> </span><span class="n">n</span>: <span class="kt">usize</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">bool</span> <span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">buf</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">buf</span><span class="p">.</span><span class="n">as_mut_ptr</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">std</span>::<span class="n">ptr</span>::<span class="n">copy_nonoverlapping</span><span class="p">(</span><span class="n">p</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="n">n</span><span class="p">),</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></div><p>This serves as a practical test case involving pointer arithmetic, bounds checking, and an <code>unsafe</code> block. References in the target program are treated under the Tree Borrows semantics.</p>
+<p>For both programs, we have formally proven in Lean the safety under Miri's operational semantics (with Tree Borrows).</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-lean" data-lang="lean"><span class="line"><span class="cl"><span class="c1">-- The empty function does not have undefined behavior.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kn">theorem</span><span class="w"> </span><span class="n">noUB</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Static</span><span class="o">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">metadata</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Metadata</span><span class="w"> </span><span class="n">s</span><span class="o">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">profile</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Profile</span><span class="w"> </span><span class="n">s</span><span class="o">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">p</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Packet</span><span class="o">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">runtime</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">RuntimeProfile</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="n">p</span><span class="o">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">(</span><span class="n">input</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">InputDraft</span><span class="bp">.</span><span class="n">CurrentInputDraft</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="n">p</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">CallLevelNoUB</span><span class="bp">.</span><span class="n">NoUB</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="n">p</span><span class="w">
+</span></span></span></code></pre></div><h2 id="a-bug-in-miri">A bug in Miri</h2>
+<p>While verifying state transitions related to Tree Borrows in Lean 4, we encountered a subtle edge case that resulted in an internal assertion failure in Miri. We reported this finding to the developers as <a href="https://github.com/rust-lang/miri/issues/5543"><strong>Issue #5543</strong></a>.</p>
+<h2 id="challenges--current-limitations">Challenges &amp; Current Limitations</h2>
+<p>While our porting already covers most of the original interpreter, the current codebase and experiments face several challenges:</p>
+<ol>
+<li>The Lean implementation of the interpreter is currently unoptimized. Workloads that run quickly in native Miri take significantly longer inside Lean, which directly impacts proof elaboration and build times. For the second example above, it takes over 2 hours to check the validity of the proof.</li>
+<li>To evaluate MIR accurately, the exported data includes <code>rustc</code> layout and sizing metadata for all relevant standard library types. This inflates exported program payloads to ~500MiB, adding overhead to the evaluation process.</li>
+<li><code>lean-miri</code> currently operates as a forward-execution step interpreter. Without a dedicated program logic (such as a weakest precondition calculus), verification requires manually inferring and structuring intermediate lemmas, which scales proof complexity.</li>
+<li>To keep initial verification tractable, features like garbage collection and data race detection within the interpreter were disabled during current experimental runs. Enabling full data race checking to verify liveness across arbitrary thread schedules remains work in progress.</li>
+<li>We lack a large, well-designed theorem library for proving various properties of the interpreter and its execution traces. To make verification of larger programs practical, we need to avoid repeatedly proving basic results and instead reuse established lemmas from the framework. The proof of the second example, for instance, currently consists of over 700,000 lines of Lean code and is essentially an unmaintainable mess. It will need substantial refactoring around a well-designed program logic and a reusable library of lemmas.</li>
+</ol>
+<h2 id="whats-next">What’s Next?</h2>
+<p><code>lean-miri</code> is still an early-stage experiment, not a push-button verifier for arbitrary Rust code. We have a lot of refactoring and optimization work ahead. In particular, designing a nice program logic and building a useful library of lemmas should be a very interesting challenge.</p>
+<p>If you are interested in our development, check out the repository! Feedback, contributions, and discussions are all very welcome.</p>
+<p>GitHub: <a href="https://github.com/proofs-rs/lean-miri">https://github.com/proofs-rs/lean-miri</a></p>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    <footer class="footer">
+  <span><a href="/">proofs.rs</a></span> ·
+  <span><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></span> ·
+  <span><a href="https://github.com/proofs-rs/blog">Source</a></span> ·
+  <span>Built with <a href="https://gohugo.io/">Hugo</a> and <a href="https://github.com/adityatelange/hugo-PaperMod">PaperMod</a></span>
+</footer>
+</body>
+
+</html>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://proofs.rs/blog/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust/</loc>
+    <lastmod>2026-11-24T14:12:30+00:00</lastmod>
+  </url><url>
+    <loc>https://proofs.rs/blog/</loc>
+    <lastmod>2026-11-24T14:12:30+00:00</lastmod>
+  </url><url>
+    <loc>https://proofs.rs/blog/lean-miri-formally-proving-rust-programs-free-of-undefined-behavior-with-lean/</loc>
+    <lastmod>2026-11-03T14:24:37+00:00</lastmod>
+  </url><url>
+    <loc>https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/</loc>
+    <lastmod>2026-10-10T22:23:16+00:00</lastmod>
+  </url>
+</urlset>

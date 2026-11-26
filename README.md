@@ -5,7 +5,7 @@
 - [Zulip](https://proofs-rs.zulipchat.com/)
 - [CLI](cli/README.md)
 - [Development](docs/development.md)
-- [Announcement](https://proofs-rs.hashnode.dev/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results)
+- [Announcement](https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/)
 - [Zulip announcements setup](docs/zulip-notifications.md)
 
 This repository contains the source for [proofs.rs](https://proofs.rs), a public registry for Rust formal verification results. It includes the website and service, the `cargo proofs` publishing CLI, and the proofs.rs book.

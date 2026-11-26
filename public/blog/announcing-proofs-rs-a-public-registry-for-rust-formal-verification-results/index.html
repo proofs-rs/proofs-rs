@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Announcing Proofs.rs: A Public Registry for Rust Formal Verification Results | proofs.rs blog</title>
+<meta name="keywords" content="">
+<meta name="description" content="Hi, folks! We’re very happy to introduce proofs.rs, a place to publish and explore formal verification results for Rust crates. There are some great tools…">
+<meta name="author" content="Yuichi Nishiwaki">
+<link rel="canonical" href="https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/">
+<link crossorigin="anonymous" href="/blog/assets/css/stylesheet.fc220c15db4aef0318bbf30adc45d33d4d7c88deff3238b23eb255afdc472ca6.css" integrity="sha256-/CIMFdtK7wMYu/MK3EXTPU18iN7/MjiyPrJVr9xHLKY=" rel="preload stylesheet" as="style"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" hreflang="en" href="https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/">
+<meta property="og:title" content="Announcing Proofs.rs: A Public Registry for Rust Formal Verification Results">
+<meta property="og:description" content="Hi, folks! We’re very happy to introduce proofs.rs, a place to publish and explore formal verification results for Rust crates. There are some great tools…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/">
+<meta property="og:site_name" content="proofs.rs blog">
+
+</head>
+
+<body class="" id="top"><header class="header">
+  <nav class="nav" aria-label="Main navigation">
+    <div class="logo"><a href="/blog/">proofs.rs blog</a></div>
+    <ul id="menu">
+      <li><a href="/">proofs.rs</a></li>
+      <li><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></li>
+    </ul>
+  </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      Announcing Proofs.rs: A Public Registry for Rust Formal Verification Results
+    </h1>
+    <div class="post-description">
+      Hi, folks! We’re very happy to introduce proofs.rs, a place to publish and explore formal verification results for Rust crates. There are some great tools…
+    </div>
+    <div class="post-meta"><time datetime="2026-10-10T22:23:16Z">October 10, 2026</time> · Yuichi Nishiwaki
+
+</div>
+  </header> 
+  <div class="post-content"><p>Hi, folks!</p>
+<p>We’re very happy to introduce <a href="https://proofs.rs">proofs.rs</a>, a place to publish and explore formal verification results for Rust crates.</p>
+<h2 id="why">Why?</h2>
+<p>There are some great tools for formally verifying Rust code, such as Kani, Verus, and Creusot, but their verification results often stay buried in individual repositories, making them hard to discover when we’re trying to decide whether to trust a library.</p>
+<p>We wanted to make those results easier to find, examine, and reuse as building blocks for establishing the correctness of larger systems.</p>
+<h2 id="what-does-it-do">What does it do?</h2>
+<p>On proofs.rs, you can browse verification reports by crate and API, see what properties have been verified, and follow links to the GitHub repositories containing the verification code and supporting evidence.</p>
+<p>Each report also has a comment section for questions and discussion. Why? Because, importantly, proofs.rs doesn’t (or rather, cannot) certify that a crate is safe. Formal verification results come with assumptions, limitations, and sometimes subtle details that matter. Understanding what a result actually guarantees requires careful review. That’s why proofs.rs is designed around sharing evidence and enabling discussion, rather than issuing certifications.</p>
+<h2 id="how-to-use-it">How to use it?</h2>
+<p>Publishing a report is pretty straightforward:</p>
+<ol>
+<li>Fork a Rust crate on GitHub.</li>
+<li>Add verification annotations to your fork.</li>
+<li>Run cargo-proofs to submit your report.</li>
+</ol>
+<p>That’s it!</p>
+<p>Partial proofs are very welcome. You don’t need to verify every API or every property. Even a small, well-scoped result can be useful to someone, and perhaps one day, someone will build on your work to verify the entire crate.</p>
+<p>As an example, we’ve verified <a href="https://crates.io/crates/itoa/1.0.18">the itoa crate</a> and published <a href="https://proofs.rs/report/4">the results</a> on proofs.rs. Feel free to take a look!</p>
+<h2 id="whats-next">What’s next?</h2>
+<p>We’d love to see formal verification become one more piece of information people can use when choosing software dependencies. Over time, we hope these results can also be composed and reused to establish stronger guarantees for larger systems built from verified components.</p>
+<p>proofs.rs is still in a very early beta stage, so there may be bugs and rough edges in the user experience. Feedback, suggestions, and contributions are always appreciated.</p>
+<p>Right now, cargo-proofs supports Kani and Creusot. If you’re using or developing another verification tool, we’d be happy to hear about it. Requests for additional tool support are very welcome!</p>
+<p>Thank you!</p>
+<p><a href="https://proofs.rs">https://proofs.rs</a></p>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    <footer class="footer">
+  <span><a href="/">proofs.rs</a></span> ·
+  <span><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></span> ·
+  <span><a href="https://github.com/proofs-rs/blog">Source</a></span> ·
+  <span>Built with <a href="https://gohugo.io/">Hugo</a> and <a href="https://github.com/adityatelange/hugo-PaperMod">PaperMod</a></span>
+</footer>
+</body>
+
+</html>

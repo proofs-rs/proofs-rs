@@ -8,6 +8,8 @@ for (const path of [
   "/tool/aeneas",
   "/book/aeneas.html",
   "/book/review-a-dependency.html",
+  "/blog/",
+  "/blog/sitemap.xml",
   "/openapi.json",
   "/api/v1/health",
   "/api/v1/home",
@@ -29,6 +31,45 @@ for (const path of [
     !r.headers.get("x-robots-tag")?.includes("noindex")
   )
     throw Error("Missing staging noindex header");
+  if (path === "/") {
+    const html = await r.text();
+    if (
+      !html.includes('href="/blog/"') ||
+      html.includes("proofs-rs.hashnode.dev")
+    )
+      throw Error("Home navigation must link to the local blog");
+  }
+  if (path === "/blog/") {
+    const html = await r.text();
+    const rss = html
+      .match(/<link[^>]+type="application\/rss\+xml"[^>]*>/i)?.[0]
+      ?.match(/href="([^"]+)"/i)?.[1];
+    if (!rss) throw Error("Blog RSS discovery link missing");
+    const feed = await fetch(origin + new URL(rss, origin).pathname);
+    if (!feed.ok || !(await feed.text()).includes("<rss"))
+      throw Error("Invalid blog RSS feed");
+
+    const links = [...html.matchAll(/href="([^"]+)"/g)]
+      .map((m) => new URL(m[1], origin).pathname)
+      .filter((path) => /^\/blog\/[a-z0-9-]+\/$/.test(path));
+    if (!links.length) throw Error("Blog has no articles");
+    for (const article of [...new Set(links)].slice(0, 3)) {
+      const post = await fetch(origin + article, { redirect: "manual" });
+      if (!post.ok || !/<h1[\s>]/.test(await post.text()))
+        throw Error(article + " failed blog smoke check (" + post.status + ")");
+    }
+    const redirect = await fetch(origin + "/blog", { redirect: "manual" });
+    if (
+      redirect.status !== 308 ||
+      redirect.headers.get("location") !== "/blog/"
+    )
+      throw Error("Expected /blog to redirect to /blog/");
+    const missing = await fetch(origin + "/blog/not-a-valid-article-404/");
+    if (missing.status !== 404)
+      throw Error("Expected unknown blog path to return 404");
+  }
+  if (path === "/blog/sitemap.xml" && !(await r.text()).includes("<urlset "))
+    throw Error("Invalid blog sitemap");
   if (path === "/api/v1/tools") {
     const catalogue = await r.json();
     if (
