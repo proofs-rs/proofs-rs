@@ -1,1 +1,1 @@
-https://github.com/proofs-rs/blog/tree/be522ca9d43f6e1c8ee8655f15ae48ed9e6bc006
+https://github.com/proofs-rs/blog/tree/1d82d713cc69e16199d69043e8f087282fb15808
