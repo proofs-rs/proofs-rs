@@ -27,10 +27,28 @@ const registry = JSON.parse(
   ),
 );
 assert.equal(manifest.formatVersion, registry.formatVersion);
+const cliDirectory = realpathSync(new URL("../cli/", import.meta.url));
+const cliGit = (...args: string[]) =>
+  execFileSync("git", ["-C", cliDirectory, ...args], {
+    encoding: "utf8",
+  }).trim();
+const cliPin = execFileSync("git", ["rev-parse", "HEAD:cli"], {
+  encoding: "utf8",
+}).trim();
+assert.equal(
+  realpathSync(cliGit("rev-parse", "--show-toplevel")),
+  cliDirectory,
+  "Initialize the pinned CLI submodule",
+);
+assert.equal(
+  cliGit("rev-parse", "HEAD"),
+  cliPin,
+  "CLI checkout must match the service gitlink",
+);
 assert.equal(
   manifest.producer.gitRevision,
-  execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-  "Corpus must be produced by this checkout",
+  cliPin,
+  "Corpus must be produced by the pinned CLI checkout",
 );
 assert.match(manifest.producer.binarySha256, /^[a-f0-9]{64}$/);
 const producerBinary = resolve(

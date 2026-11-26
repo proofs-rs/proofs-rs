@@ -608,7 +608,7 @@ export async function safeFetch(
       redirect: "manual",
       signal,
       headers: {
-        "User-Agent": "proofs.rs/0.1 (https://github.com/proofs-rs/proofs-rs)",
+        "User-Agent": "proofs.rs/0.1 (https://proofs.rs)",
       },
     });
     if ([301, 302, 303, 307, 308].includes(r.status)) {

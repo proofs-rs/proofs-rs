@@ -12,7 +12,7 @@ Check these before writing any configuration. Each one can block publication.
   with Lean are supported. The exact version you used must be listed under
   **Supported versions** on the tool's page, such as [Kani](/tool/kani); if it
   is not,
-  [request it](https://github.com/proofs-rs/proofs-rs/issues/new?template=tool.yml).
+  [request it](https://proofs-rs.zulipchat.com/).
 - [ ] **A crate version released on crates.io.** A Report targets one version of
   one library crate. proofs.rs imports that version's public API catalogue from
   crates.io and docs.rs, so the version must be published and its docs.rs build
@@ -177,4 +177,4 @@ but its history stays public. See [Update, withdraw, and recover](update-a-repor
 - **Something failed:** see [Troubleshooting](troubleshooting.md).
 
 For every command and option, see the
-[CLI documentation](https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md).
+[CLI documentation](https://github.com/proofs-rs/cargo-proofs/blob/main/README.md).

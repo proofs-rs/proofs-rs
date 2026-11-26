@@ -76,5 +76,5 @@ withdrawal. To have content removed rather than withdrawn, see
 [Get help and give feedback](get-help.md).
 
 For details of local publication state and matching rules, see
-[Revisions, conflicts, and recovery](https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md#revisions-conflicts-and-recovery)
+[Revisions, conflicts, and recovery](https://github.com/proofs-rs/cargo-proofs/blob/main/README.md#revisions-conflicts-and-recovery)
 in the CLI documentation.

@@ -191,7 +191,7 @@ paths (`Proofs/Increment.lean` for `Proofs.Increment`), and the official pinned
 Aeneas Git dependency. It does not support custom Lake source directories,
 local-path Aeneas dependencies, feature/target-specific extraction, or the Coq,
 F*, and HOL4 backends. See the [version's limitations](/tool-version/aeneas-be86ab0f1989d04944292b345b24c435be3ad10a)
-and [CLI documentation](https://github.com/proofs-rs/proofs-rs/tree/main/cli#aeneas-lean).
+and [CLI documentation](https://github.com/proofs-rs/cargo-proofs/blob/main/README.md#aeneas-lean).
 
 ## Use a cumulative Aeneas patch
 

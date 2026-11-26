@@ -36,4 +36,4 @@ proofs.rs is free to use and is not currently monetized. We do not perform behav
 
 Reports, Claims, comments, and other contributions are published under CC BY 4.0 where the contributor holds the necessary rights. Verified code and external evidence remain subject to their respective licenses. The aim is to make verification results and the discussion around them reusable public resources, rather than information controlled solely by individual contributors or by the service itself.
 
-Anyone can publish verification results, participate in review, or contribute to the development of proofs.rs itself. The source code and development discussions are public on [GitHub](https://github.com/proofs-rs/proofs-rs). See [Get help and give feedback](get-help.md) for where to raise questions and issues.
+Anyone can publish verification results or participate in review. The [cargo-proofs CLI source code and issue tracker](https://github.com/proofs-rs/cargo-proofs) are public. See [Get help and give feedback](get-help.md) for where to raise questions and issues.

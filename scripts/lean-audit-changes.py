@@ -7,7 +7,7 @@ import subprocess
 
 PREFIXES = ('cli/src/', 'cli/tests/', 'cli/.cargo/', 'src/', 'migrations/',
             'tests/', 'fixtures/', '.github/workflows/')
-FILES = {'cli/Cargo.toml', 'cli/Cargo.lock', 'Cargo.toml', 'Cargo.lock',
+FILES = {'cli', '.gitmodules', 'cli/Cargo.toml', 'cli/Cargo.lock', 'Cargo.toml', 'Cargo.lock',
          'package.json', 'package-lock.json', '.npmrc',
          'scripts/prepare-lean-audit.py', 'scripts/lean-audit-changes.py'}
 

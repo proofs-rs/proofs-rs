@@ -3,16 +3,16 @@
 - [Website](https://proofs.rs)
 - [Book](https://proofs.rs/book/)
 - [Zulip](https://proofs-rs.zulipchat.com/)
-- [CLI](cli/README.md)
+- [CLI source](https://github.com/proofs-rs/cargo-proofs)
 - [Development](docs/development.md)
 - [Announcement](https://proofs.rs/blog/announcing-proofs-rs-a-public-registry-for-rust-formal-verification-results/)
 - [Zulip announcements setup](docs/zulip-notifications.md)
 
-This repository contains the source for [proofs.rs](https://proofs.rs), a public registry for Rust formal verification results. It includes the website and service, the `cargo proofs` publishing CLI, and the proofs.rs book.
+This repository contains the source for [proofs.rs](https://proofs.rs), a public registry for Rust formal verification results. It includes the website and service, the proofs.rs book, and a pinned checkout of the independently maintained `cargo proofs` CLI.
 
 A Report records an author's verification results for one version of a crate, with Claims about individual APIs, assumptions, limitations, evidence, and discussion. Publication is not certification: proofs.rs does not independently rerun verification. Authors can publish independently of the upstream project, and small, well-scoped results are welcome.
 
-The service runs on Cloudflare Workers with Hono and TypeScript. The [development guide](docs/development.md) covers local setup, tests, and deployment; its [local UI demo](docs/development.md#local-ui-demo) provides seeded scenarios for working on the interface. The CLI lives in `cli/`, and the book source lives in `book/`.
+The service runs on Cloudflare Workers with Hono and TypeScript. The [development guide](docs/development.md) covers local setup, tests, and deployment; its [local UI demo](docs/development.md#local-ui-demo) provides seeded scenarios for working on the interface. The CLI is a Git submodule at `cli/`; run `git submodule update --init` after checking out the service. The book source lives in `book/`.
 
 Authenticated API writes have daily quotas, reset at midnight UTC. Report creation
 and revisions share 200 requests per account; verification runs allow 900, findings

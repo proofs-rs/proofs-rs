@@ -31,12 +31,14 @@ jobs:
     timeout-minutes: 40
     outputs:
       commit: ${{ steps.release.outputs.commit }}
+      cli_commit: ${{ steps.release.outputs.cli_commit }}
     steps:
       - name: Validate tag syntax
         run: |
           [[ "$RELEASE_TAG" =~ ^cargo-proofs-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
       - uses: actions/checkout@v4
         with:
+          submodules: true
           ref: refs/tags/${{ env.RELEASE_TAG }}
           fetch-depth: 0
           persist-credentials: false
@@ -44,10 +46,15 @@ jobs:
         id: release
         run: |
           git merge-base --is-ancestor HEAD origin/main
+          test "$(git config -f .gitmodules --get submodule.cli.url)" = https://github.com/proofs-rs/cargo-proofs.git
+          cli_commit=$(git rev-parse HEAD:cli)
+          test "$(git -C cli rev-parse HEAD)" = "$cli_commit"
+          echo "cli_commit=$cli_commit" >> "$GITHUB_OUTPUT"
           python3 - <<'PY'
           import os, pathlib, tomllib
           package = tomllib.loads(pathlib.Path('cli/Cargo.toml').read_text())['package']
           assert package['name'] == 'cargo-proofs', 'Unexpected package'
+          assert package['repository'] == 'https://github.com/proofs-rs/cargo-proofs', 'Unexpected package repository'
           assert os.environ['RELEASE_TAG'] == 'cargo-proofs-v' + package['version'], 'Tag/version mismatch'
           assert package.get('license') or package.get('license-file'), 'Choose the CLI license before publishing'
           assert package.get('publish') == ['crates-io'], 'Expected crates.io-only publication'
@@ -109,9 +116,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          submodules: true
           ref: ${{ needs.verify.outputs.commit }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+      - name: Require the verified service and CLI revision
+        env:
+          VERIFIED_SERVICE_COMMIT: ${{ needs.verify.outputs.commit }}
+          VERIFIED_CLI_COMMIT: ${{ needs.verify.outputs.cli_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$VERIFIED_SERVICE_COMMIT"
+          test "$(git rev-parse HEAD:cli)" = "$VERIFIED_CLI_COMMIT"
+          test "$(git -C cli rev-parse HEAD)" = "$VERIFIED_CLI_COMMIT"
       - name: Obtain short-lived crates.io token
         if: ${{ !inputs.bootstrap }}
         id: auth
