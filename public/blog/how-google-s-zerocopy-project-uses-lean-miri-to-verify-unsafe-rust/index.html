@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>How Google&#39;s zerocopy Project Uses lean-miri to Verify Unsafe Rust | proofs.rs blog</title>
+<meta name="keywords" content="">
+<meta name="description" content="lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request…">
+<meta name="author" content="Yuichi Nishiwaki">
+<link rel="canonical" href="https://proofs.rs/blog/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust/">
+<link crossorigin="anonymous" href="/blog/assets/css/stylesheet.fc220c15db4aef0318bbf30adc45d33d4d7c88deff3238b23eb255afdc472ca6.css" integrity="sha256-/CIMFdtK7wMYu/MK3EXTPU18iN7/MjiyPrJVr9xHLKY=" rel="preload stylesheet" as="style"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" hreflang="en" href="https://proofs.rs/blog/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust/">
+<meta property="og:title" content="How Google&#39;s zerocopy Project Uses lean-miri to Verify Unsafe Rust">
+<meta property="og:description" content="lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://proofs.rs/blog/how-google-s-zerocopy-project-uses-lean-miri-to-verify-unsafe-rust/">
+<meta property="og:site_name" content="proofs.rs blog">
+
+</head>
+
+<body class="" id="top"><header class="header">
+  <nav class="nav" aria-label="Main navigation">
+    <div class="logo"><a href="/blog/">proofs.rs blog</a></div>
+    <ul id="menu">
+      <li><a href="/">proofs.rs</a></li>
+      <li><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></li>
+    </ul>
+  </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      How Google&#39;s zerocopy Project Uses lean-miri to Verify Unsafe Rust
+    </h1>
+    <div class="post-description">
+      lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request…
+    </div>
+    <div class="post-meta"><time datetime="2026-11-24T14:12:30Z">November 24, 2026</time> · Yuichi Nishiwaki
+
+</div>
+  </header> 
+  <div class="post-content"><p>lean-miri was recently adopted by Anneal, a Rust verification framework developed inside the zerocopy repository. Following this adoption, a pull request from Anneal’s creator, Josh Liebow-Feeser, has already been merged into lean-miri.</p>
+<p><a href="https://proofs-rs.github.io/lean-miri/">lean-miri</a> ports Rust’s Miri interpreter to Lean. Rather than running lean-miri directly as an end-to-end verifier, Anneal uses its MIR execution model as a reference semantics. Proofs in Anneal show that individual operations in Anneal’s own model correspond to the matching operations in lean-miri.</p>
+<p>The core challenge for a framework like Anneal is ensuring that its abstract proof model remains sound with respect to Rust’s actual execution semantics—including edge cases around uninitialized memory, provenance, and byte-level layouts. Building and maintaining a formal Rust semantics from scratch to anchor that model would be prohibitively expensive. Using lean-miri as a ground-truth specification solves this by grounding Anneal’s tractable proof model directly in Miri’s concrete behavior.</p>
+<p>Integrating an executable interpreter into real proofs exposed a clear gap: running an operation is different from proving properties about it (<a href="https://github.com/google/zerocopy/issues/4009">zerocopy issue #4009</a>). Anneal needed specification and frame lemmas for memory operations—such as how written bytes change and that untouched ranges stay intact—without repeatedly unfolding the interpreter’s internal representation. Josh contributed those lemmas upstream in <a href="https://github.com/proofs-rs/lean-miri/pull/91">lean-miri PR #91</a>, and driving improvements through real downstream use cases like this is a great way for the project to evolve.</p>
+<p>This integration points to a clear direction for lean-miri: it should serve not just as an executable reference, but as a practical foundation that other verification tools can build proofs on top of. If you are building verification tooling for Rust and need a formal baseline, try out lean-miri and let us know what is missing. Thanks to Josh for the contribution.</p>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    <footer class="footer">
+  <span><a href="/">proofs.rs</a></span> ·
+  <span><a href="/blog/rss.xml" type="application/rss+xml">RSS</a></span> ·
+  <span><a href="https://github.com/proofs-rs/blog">Source</a></span> ·
+  <span>Built with <a href="https://gohugo.io/">Hugo</a> and <a href="https://github.com/adityatelange/hugo-PaperMod">PaperMod</a></span>
+</footer>
+</body>
+
+</html>

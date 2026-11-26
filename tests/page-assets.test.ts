@@ -40,10 +40,7 @@ test("site and Book headers mark the same off-site links", () => {
           a.querySelector(".external-mark[aria-hidden=true]") !== null,
       ]);
   const site = external(pageLayout("t", "", "", null));
-  assert.deepEqual(site, [
-    ["Blog↗", true],
-    ["Zulip↗", true],
-  ]);
+  assert.deepEqual(site, [["Zulip↗", true]]);
   assert.deepEqual(
     external(
       readFileSync(

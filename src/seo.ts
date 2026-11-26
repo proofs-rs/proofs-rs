@@ -272,6 +272,7 @@ async function generate(
       "sitemapindex",
       [
         "/sitemap-pages.xml",
+        "/blog/sitemap.xml",
         ...Array.from(
           { length: Math.ceil((count.results[0]?.n || 0) / PAGE_SIZE) },
           (_, i) => `/sitemap-records-${i + 1}.xml`,

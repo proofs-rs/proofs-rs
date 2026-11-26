@@ -66,6 +66,7 @@ test("sitemaps exclude hidden, withdrawn and superseded evidence", async () => {
       urls(await (await seoResponse(env, "/sitemap.xml"))!.text()),
       [
         "https://proofs.rs/sitemap-pages.xml",
+        "https://proofs.rs/blog/sitemap.xml",
         "https://proofs.rs/sitemap-records-1.xml",
       ],
     );
@@ -104,9 +105,9 @@ test("pagination covers every URL without exceeding the per-file limit", async (
     const insert = db.prepare("INSERT INTO reports VALUES(?,1,'public',NULL)");
     for (let id = 4; id <= 2004; id++) insert.run(id);
     const index = urls(await (await seoResponse(env, "/sitemap.xml"))!.text());
-    assert.equal(index.length, 4);
+    assert.equal(index.length, 5);
     const all: string[] = [];
-    for (const url of index.slice(1)) {
+    for (const url of index.slice(2)) {
       const entries = urls(
         await (await seoResponse(env, new URL(url).pathname))!.text(),
       );
@@ -207,7 +208,10 @@ test("an empty registry still advertises documentation", async () => {
     );
     assert.deepEqual(
       urls(await (await seoResponse(env, "/sitemap.xml"))!.text()),
-      ["https://proofs.rs/sitemap-pages.xml"],
+      [
+        "https://proofs.rs/sitemap-pages.xml",
+        "https://proofs.rs/blog/sitemap.xml",
+      ],
     );
     assert.equal(
       (await seoResponse(env, "/sitemap-records-1.xml"))!.status,
@@ -349,7 +353,7 @@ test("exact page boundary has no duplicate latest URL or extra empty file", asyn
     const insert = db.prepare("INSERT INTO reports VALUES(?,1,'public',NULL)");
     for (let id = 4; id < 999; id++) insert.run(id); // 5 initial URLs + 995 reports
     const index = urls(await (await seoResponse(env, "/sitemap.xml"))!.text());
-    assert.equal(index.length, 2);
+    assert.equal(index.length, 3);
     assert.equal(
       urls(await (await seoResponse(env, "/sitemap-records-1.xml"))!.text())
         .length,
