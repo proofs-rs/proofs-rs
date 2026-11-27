@@ -235,6 +235,9 @@ app.route("/", publicRoutes);
 app.route("/api/v1/admin", admin);
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
 app.get("/blog", (c) => c.redirect("/blog/" + new URL(c.req.url).search, 308));
+app.get("/lean-miri", (c) =>
+  c.redirect("/lean-miri/" + new URL(c.req.url).search, 308),
+);
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.onError((e, c) => {
   if (e instanceof Fault)
