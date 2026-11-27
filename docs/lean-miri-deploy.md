@@ -1,7 +1,7 @@
 # lean-miri landing page
 
 The canonical landing page is https://proofs.rs/lean-miri/. Its source is
-`site/index.html` in [proofs-rs/lean-miri](https://github.com/proofs-rs/lean-miri).
+`site/landing.html` (or `site/index.html` before the redirect) in [proofs-rs/lean-miri](https://github.com/proofs-rs/lean-miri).
 The API reference stays on [GitHub Pages](https://proofs-rs.github.io/lean-miri/Miri.html).
 
 To publish an LP update, check out the desired lean-miri commit and run:
