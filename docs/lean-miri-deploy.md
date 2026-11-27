@@ -13,7 +13,8 @@ npm test
 npm run build
 ```
 
-Commit the generated `public/lean-miri/index.html` and `lean-miri-source.txt`
-in a staging pull request. The normal Workers deployment publishes the landing
+Commit the generated `public/lean-miri/index.html`, `public/lean-miri/style.css`,
+and `lean-miri-source.txt` in a staging pull request. The sync extracts the
+stylesheet so the page renders under the site’s same-origin style policy. The normal Workers deployment publishes the landing
 page without building the Lean API docs. Keep GitHub Pages module URLs and
 `api-index.html` unchanged.
