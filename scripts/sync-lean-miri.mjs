@@ -6,9 +6,11 @@ const [checkout, flag, ...extra] = process.argv.slice(2);
 if (!checkout || (flag && flag !== "--check") || extra.length)
   throw new Error("Usage: node scripts/sync-lean-miri.mjs <lean-miri checkout> [--check]");
 
-const git = (...args) => execFileSync("git", ["-C", resolve(checkout), ...args], { encoding: "utf8" });
+const git = (...args) => execFileSync("git", ["-C", resolve(checkout), ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
 const revision = git("rev-parse", "HEAD").trim();
-let html = git("show", revision + ":site/index.html");
+const files = git("ls-tree", "-r", "--name-only", revision, "site/").split("\n");
+const input = files.includes("site/landing.html") ? "site/landing.html" : "site/index.html";
+let html = git("show", revision + ":" + input);
 
 const replacements = [
   [
